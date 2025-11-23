@@ -6,6 +6,7 @@ import com.example.myapplication.data.model.Message
 import com.example.myapplication.data.model.Plan
 import com.example.myapplication.data.model.RegisterDto
 import com.example.myapplication.data.model.User
+import com.example.myapplication.data.model.Subscription
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -53,6 +54,12 @@ interface ApiService {
     @PUT("api/users/{id}")
     suspend fun updateUser(@Path("id") id: Int, @Body user: User): Response<User>
 
+    @GET("api/users/{id}")
+    suspend fun getUserById(@Path("id") id: Int): Response<User>
+
     @GET("api/plans")
     suspend fun getAllPlans(): Response<List<Plan>>
+
+    @GET("api/users/{userId}/subscription")
+    suspend fun getSubscription(@Path("userId") userId: Int): Response<Subscription>
 }

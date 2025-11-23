@@ -1,8 +1,6 @@
 package com.example.myapplication.ui.screen
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -48,14 +46,24 @@ fun FavouritesScreen(modifier: Modifier = Modifier, viewModel: LoginViewModel = 
 
         LazyColumn {
             items(favourites) { favourite ->
-                FavouriteItem(favourite, viewModel)
+                FavouriteItem(
+                    favourite = favourite,
+                    viewModel = viewModel,
+                    onClick = {
+                         viewModel.selectUser(favourite.favouritedUser)
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-fun FavouriteItem(favourite: Favourite, viewModel: LoginViewModel) {
+fun FavouriteItem(
+    favourite: Favourite,
+    viewModel: LoginViewModel,
+    onClick: () -> Unit
+) {
     val loginState by viewModel.loginState.collectAsState()
     val currentUser = (loginState as? LoginState.Success)?.user
 
@@ -63,6 +71,7 @@ fun FavouriteItem(favourite: Favourite, viewModel: LoginViewModel) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
+            .clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),

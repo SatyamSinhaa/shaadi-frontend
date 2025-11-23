@@ -1,44 +1,132 @@
 package com.example.myapplication.ui.screen
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.example.myapplication.data.model.User
-import com.example.myapplication.ui.viewmodel.LoginViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UserProfileScreen(modifier: Modifier = Modifier, user: User?, onBack: () -> Unit, viewModel: LoginViewModel = viewModel()) {
+fun UserProfileScreen(modifier: Modifier = Modifier, user: User?, onBack: () -> Unit) {
     if (user == null) return
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Top,
-        horizontalAlignment = Alignment.Start
-    ) {
-        Button(onClick = onBack) {
-            Text("Back")
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(text = user.name) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
         }
-        Spacer(modifier = Modifier.height(16.dp))
+    ) { paddingValues ->
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Profile Header (Photo, Name, Email)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                content = {
+                    Column(
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Profile Photo
+                        Box(
+                            modifier = Modifier
+                                .size(120.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (user.photoUrl != null) {
+                                AsyncImage(
+                                    model = user.photoUrl,
+                                    contentDescription = "Profile Photo",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Text(
+                                    text = user.name.firstOrNull()?.toString() ?: "?",
+                                    style = MaterialTheme.typography.headlineLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = user.name,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = user.email,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            )
 
-        Text(
-            text = "User Profile",
-            style = MaterialTheme.typography.headlineMedium
-        )
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Text("Name: ${user.name}", style = MaterialTheme.typography.bodyLarge)
-        Text("Email: ${user.email}", style = MaterialTheme.typography.bodyMedium)
-        user.age?.let { Text("Age: $it", style = MaterialTheme.typography.bodyMedium) }
-        user.gender?.let { Text("Gender: $it", style = MaterialTheme.typography.bodyMedium) }
-        user.religion?.let { Text("Religion: $it", style = MaterialTheme.typography.bodyMedium) }
-        user.cityTown?.let { Text("City/Town: $it", style = MaterialTheme.typography.bodyMedium) }
-        user.district?.let { Text("District: $it", style = MaterialTheme.typography.bodyMedium) }
-        user.state?.let { Text("State: $it", style = MaterialTheme.typography.bodyMedium) }
-        user.bio?.let { Text("Bio: $it", style = MaterialTheme.typography.bodyMedium) }
+            // Basic Info Section
+            ProfileSection(title = "Basic Information") {
+                ProfileField(label = "Age", value = user.age?.toString())
+                ProfileField(label = "Gender", value = user.gender)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Personal Details Section
+            ProfileSection(title = "Personal Details") {
+                ProfileField(label = "Gotr", value = user.gotr)
+                ProfileField(label = "Caste", value = user.caste)
+                ProfileField(label = "Category", value = user.category)
+                ProfileField(label = "Religion", value = user.religion)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Location Section
+            ProfileSection(title = "Location") {
+                ProfileField(label = "City/Town", value = user.cityTown)
+                ProfileField(label = "District", value = user.district)
+                ProfileField(label = "State", value = user.state)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Bio Section
+            ProfileSection(title = "About Me") {
+                Text(
+                    text = user.bio ?: "No bio available",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
     }
 }

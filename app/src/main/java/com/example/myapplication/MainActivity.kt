@@ -5,8 +5,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
@@ -23,10 +27,14 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.widget.Toast
+import coil.compose.AsyncImage
 import com.example.myapplication.data.model.User
 import com.example.myapplication.ui.screen.FavouritesScreen
 import com.example.myapplication.ui.screen.LocationDetailsScreen
@@ -43,6 +51,7 @@ import com.example.myapplication.ui.screen.UserProfileScreen
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import com.example.myapplication.ui.viewmodel.LoginState
 import com.example.myapplication.ui.viewmodel.LoginViewModel
+import com.example.myapplication.ui.viewmodel.PlansViewModel
 import androidx.compose.material3.ExperimentalMaterial3Api
 
 class MainActivity : ComponentActivity() {
@@ -61,10 +70,14 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = viewModel()) {
-    val loginState by viewModel.loginState.collectAsState()
-    val selectedUser by viewModel.selectedUser.collectAsState()
-    var selectedTab by remember { mutableStateOf(0) }
+fun AppNavigation(
+    modifier: Modifier = Modifier,
+    loginViewModel: LoginViewModel = viewModel(),
+    plansViewModel: PlansViewModel = viewModel()
+) {
+    val loginState by loginViewModel.loginState.collectAsState()
+    val selectedUser by loginViewModel.selectedUser.collectAsState<User?>()
+    var selectedTab by remember { mutableIntStateOf(0) }
     var showFavourites by remember { mutableStateOf(false) }
     var showMessages by remember { mutableStateOf(false) }
     var showRegister by remember { mutableStateOf(false) }
@@ -75,6 +88,7 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
     var refreshMessages by remember { mutableStateOf(false) }
     var showPlans by remember { mutableStateOf(false) }
     var showChatDetail by remember { mutableStateOf<User?>(null) }
+    var showUserProfile by remember { mutableStateOf<User?>(null) }
 
     // State to control bottom bar visibility
     var isChatDetailVisible by remember { mutableStateOf(false) }
@@ -106,8 +120,8 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                 // Auto-login after completing details
                 // Since we don't have password stored, we need to modify login to accept user object or adjust
                 // For now, set login state directly
-                viewModel._loginState.value = LoginState.Success(updatedUser)
-                viewModel.fetchAllUsers()
+                loginViewModel.updateUser(updatedUser)
+                loginViewModel.fetchAllUsers()
             }
         )
         return
@@ -117,9 +131,58 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
         is LoginState.Success -> {
             val currentUser = (loginState as LoginState.Success).user
             val selectedUserValue = selectedUser
-            if (showFavourites) {
-                BackHandler { showFavourites = false }
+
+            val profileIcon: @Composable () -> Unit = {
+                if (currentUser.photoUrl != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .then(
+                                if (selectedTab == 3) Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                                else Modifier
+                            )
+                    ) {
+                        AsyncImage(
+                            model = currentUser.photoUrl,
+                            contentDescription = "Profile",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                } else {
+                    Icon(Icons.Filled.Person, contentDescription = "Profile")
+                }
+            }
+
+            if (showChatDetail != null) {
+                BackHandler { showChatDetail = null }
+                MessageDetailScreen(
+                    modifier = modifier,
+                    receiver = showChatDetail!!,
+                    onBack = { showChatDetail = null },
+                    viewModel = loginViewModel
+                )
+            } else if (selectedUserValue != null) {
+                BackHandler { loginViewModel.selectUser(null) }
+                UserProfileScreen(modifier = modifier, user = selectedUserValue, onBack = { loginViewModel.selectUser(null) })
+            } else if (showPlans) {
+                BackHandler { showPlans = false }
                 Scaffold(
+                    modifier = modifier,
+                    topBar = {
+                        TopAppBar(
+                            title = { Text("Shaadi App") },
+                            actions = {
+                                IconButton(onClick = {
+                                    loginViewModel.fetchFavourites(currentUser.id)
+                                    showFavourites = true
+                                }) {
+                                    Icon(Icons.Filled.Favorite, contentDescription = "Favourites")
+                                }
+                            }
+                        )
+                    },
                     bottomBar = {
                         NavigationBar {
                             NavigationBarItem(
@@ -128,7 +191,8 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                                     selectedTab = 0
                                     showFavourites = false
                                     showMessages = false
-                                    viewModel.selectUser(null)
+                                    showPlans = false
+                                    loginViewModel.selectUser(null)
                                 },
                                 icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
                                 label = { Text("Home") }
@@ -139,7 +203,8 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                                     selectedTab = 1
                                     showFavourites = false
                                     showMessages = false
-                                    viewModel.selectUser(null)
+                                    showPlans = false
+                                    loginViewModel.selectUser(null)
                                 },
                                 icon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
                                 label = { Text("Search") }
@@ -150,7 +215,8 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                                     selectedTab = 2
                                     showFavourites = false
                                     showMessages = false
-                                    viewModel.selectUser(null)
+                                    showPlans = false
+                                    loginViewModel.selectUser(null)
                                     refreshMessages = !refreshMessages
                                 },
                                 icon = { Icon(Icons.Filled.Email, contentDescription = "Messages") },
@@ -162,27 +228,77 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                                     selectedTab = 3
                                     showFavourites = false
                                     showMessages = false
-                                    viewModel.selectUser(null)
+                                    showPlans = false
+                                    loginViewModel.selectUser(null)
                                 },
-                                icon = { Icon(Icons.Filled.Person, contentDescription = "Profile") },
+                                icon = profileIcon,
+                                label = { Text("Profile") }
+                            )
+                            NavigationBarItem(
+                                selected = false,
+                                onClick = { showPlans = true },
+                                icon = { Icon(Icons.Filled.Star, contentDescription = "Premium Membership") },
+                                label = { Text("Premium") }
+                            )
+                        }
+                    }
+                ) { padding ->
+                    PlansScreen(modifier = Modifier.padding(padding), onBack = { showPlans = false }, viewModel = plansViewModel)
+                }
+            } else if (showFavourites) {
+                BackHandler { showFavourites = false }
+                Scaffold(
+                    bottomBar = {
+                        NavigationBar {
+                            NavigationBarItem(
+                                selected = selectedTab == 0,
+                                onClick = {
+                                    selectedTab = 0
+                                    showFavourites = false
+                                    showMessages = false
+                                    loginViewModel.selectUser(null)
+                                },
+                                icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
+                                label = { Text("Home") }
+                            )
+                            NavigationBarItem(
+                                selected = selectedTab == 1,
+                                onClick = {
+                                    selectedTab = 1
+                                    showFavourites = false
+                                    showMessages = false
+                                    loginViewModel.selectUser(null)
+                                },
+                                icon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
+                                label = { Text("Search") }
+                            )
+                            NavigationBarItem(
+                                selected = selectedTab == 2,
+                                onClick = {
+                                    selectedTab = 2
+                                    showFavourites = false
+                                    showMessages = false
+                                    loginViewModel.selectUser(null)
+                                    refreshMessages = !refreshMessages
+                                },
+                                icon = { Icon(Icons.Filled.Email, contentDescription = "Messages") },
+                                label = { Text("Messages") }
+                            )
+                            NavigationBarItem(
+                                selected = selectedTab == 3,
+                                onClick = {
+                                    selectedTab = 3
+                                    showFavourites = false
+                                    showMessages = false
+                                    loginViewModel.selectUser(null)
+                                },
+                                icon = profileIcon,
                                 label = { Text("Profile") }
                             )
                             NavigationBarItem(
                                 selected = false,
                                 onClick = {
-                                    scope.launch {
-                                        try {
-                                            val response = RetrofitClient.apiService.getAllPlans()
-                                            if (response.isSuccessful) {
-                                                // Handle successful response, e.g., log or show plans
-                                                println("Plans: ${response.body()}")
-                                            } else {
-                                                println("Error: ${response.errorBody()?.string()}")
-                                            }
-                                        } catch (e: Exception) {
-                                            println("Exception: ${e.message}")
-                                        }
-                                    }
+                                   showPlans = true
                                 },
                                 icon = { Icon(Icons.Filled.Star, contentDescription = "Premium Membership") },
                                 label = { Text("Premium") }
@@ -203,7 +319,7 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                                     selectedTab = 0
                                     showFavourites = false
                                     showMessages = false
-                                    viewModel.selectUser(null)
+                                    loginViewModel.selectUser(null)
                                 },
                                 icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
                                 label = { Text("Home") }
@@ -214,7 +330,7 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                                     selectedTab = 1
                                     showFavourites = false
                                     showMessages = false
-                                    viewModel.selectUser(null)
+                                    loginViewModel.selectUser(null)
                                 },
                                 icon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
                                 label = { Text("Search") }
@@ -225,7 +341,7 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                                     selectedTab = 2
                                     showFavourites = false
                                     showMessages = false
-                                    viewModel.selectUser(null)
+                                    loginViewModel.selectUser(null)
                                     refreshMessages = !refreshMessages
                                 },
                                 icon = { Icon(Icons.Filled.Email, contentDescription = "Messages") },
@@ -237,9 +353,9 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                                     selectedTab = 3
                                     showFavourites = false
                                     showMessages = false
-                                    viewModel.selectUser(null)
+                                    loginViewModel.selectUser(null)
                                 },
-                                icon = { Icon(Icons.Filled.Person, contentDescription = "Profile") },
+                                icon = profileIcon,
                                 label = { Text("Profile") }
                             )
                             NavigationBarItem(
@@ -254,100 +370,10 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                     MessagesScreen(
                         modifier = Modifier.padding(padding),
                         onBack = { showMessages = false },
-                        viewModel = viewModel,
+                        viewModel = loginViewModel,
                         onChatStatusChanged = { isVisible -> isChatDetailVisible = isVisible }
                     )
                 }
-            } else if (showPlans) {
-                BackHandler { showPlans = false }
-                Scaffold(
-                    modifier = modifier,
-                    topBar = {
-                        TopAppBar(
-                            title = { Text("Shaadi App") },
-                            actions = {
-                                IconButton(onClick = {
-                                    viewModel.fetchFavourites(currentUser.id)
-                                    showFavourites = true
-                                }) {
-                                    Icon(Icons.Filled.Favorite, contentDescription = "Favourites")
-                                }
-                            }
-                        )
-                    },
-                    bottomBar = {
-                        NavigationBar {
-                            NavigationBarItem(
-                                selected = selectedTab == 0,
-                                onClick = {
-                                    selectedTab = 0
-                                    showFavourites = false
-                                    showMessages = false
-                                    showPlans = false
-                                    viewModel.selectUser(null)
-                                },
-                                icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
-                                label = { Text("Home") }
-                            )
-                            NavigationBarItem(
-                                selected = selectedTab == 1,
-                                onClick = {
-                                    selectedTab = 1
-                                    showFavourites = false
-                                    showMessages = false
-                                    showPlans = false
-                                    viewModel.selectUser(null)
-                                },
-                                icon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
-                                label = { Text("Search") }
-                            )
-                            NavigationBarItem(
-                                selected = selectedTab == 2,
-                                onClick = {
-                                    selectedTab = 2
-                                    showFavourites = false
-                                    showMessages = false
-                                    showPlans = false
-                                    viewModel.selectUser(null)
-                                    refreshMessages = !refreshMessages
-                                },
-                                icon = { Icon(Icons.Filled.Email, contentDescription = "Messages") },
-                                label = { Text("Messages") }
-                            )
-                            NavigationBarItem(
-                                selected = selectedTab == 3,
-                                onClick = {
-                                    selectedTab = 3
-                                    showFavourites = false
-                                    showMessages = false
-                                    showPlans = false
-                                    viewModel.selectUser(null)
-                                },
-                                icon = { Icon(Icons.Filled.Person, contentDescription = "Profile") },
-                                label = { Text("Profile") }
-                            )
-                            NavigationBarItem(
-                                selected = false,
-                                onClick = { showPlans = true },
-                                icon = { Icon(Icons.Filled.Star, contentDescription = "Premium Membership") },
-                                label = { Text("Premium") }
-                            )
-                        }
-                    }
-                ) { padding ->
-                    PlansScreen(modifier = Modifier.padding(padding), onBack = { showPlans = false })
-                }
-            } else if (showChatDetail != null) {
-                BackHandler { showChatDetail = null }
-                MessageDetailScreen(
-                    modifier = modifier,
-                    receiver = showChatDetail!!,
-                    onBack = { showChatDetail = null },
-                    viewModel = viewModel
-                )
-            } else if (selectedUserValue != null) {
-                BackHandler { viewModel.selectUser(null) }
-                UserProfileScreen(modifier = modifier, user = selectedUserValue, onBack = { viewModel.selectUser(null) })
             } else {
                 Scaffold(
                     modifier = modifier,
@@ -357,7 +383,7 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                                 title = { Text("Shaadi App") },
                                 actions = {
                                     IconButton(onClick = {
-                                        viewModel.fetchFavourites(currentUser.id)
+                                        loginViewModel.fetchFavourites(currentUser.id)
                                         showFavourites = true
                                     }) {
                                         Icon(Icons.Filled.Favorite, contentDescription = "Favourites")
@@ -375,7 +401,7 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                                         selectedTab = 0
                                         showFavourites = false
                                         showMessages = false
-                                        viewModel.selectUser(null)
+                                        loginViewModel.selectUser(null)
                                     },
                                     icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
                                     label = { Text("Home") }
@@ -386,7 +412,7 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                                         selectedTab = 1
                                         showFavourites = false
                                         showMessages = false
-                                        viewModel.selectUser(null)
+                                        loginViewModel.selectUser(null)
                                     },
                                     icon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
                                     label = { Text("Search") }
@@ -397,7 +423,7 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                                         selectedTab = 2
                                         showFavourites = false
                                         showMessages = false
-                                        viewModel.selectUser(null)
+                                        loginViewModel.selectUser(null)
                                         refreshMessages = !refreshMessages
                                     },
                                     icon = { Icon(Icons.Filled.Email, contentDescription = "Messages") },
@@ -409,9 +435,9 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                                         selectedTab = 3
                                         showFavourites = false
                                         showMessages = false
-                                        viewModel.selectUser(null)
+                                        loginViewModel.selectUser(null)
                                     },
-                                    icon = { Icon(Icons.Filled.Person, contentDescription = "Profile") },
+                                    icon = profileIcon,
                                     label = { Text("Profile") }
                                 )
                                 NavigationBarItem(
@@ -427,7 +453,7 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                     when (selectedTab) {
                         0 -> UserListScreen(
                             modifier = Modifier.padding(padding),
-                            viewModel = viewModel,
+                            viewModel = loginViewModel,
                             onChatClick = { user ->
                                 showChatDetail = user
                             }
@@ -435,11 +461,11 @@ fun AppNavigation(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                         1 -> SearchScreen(modifier = Modifier.padding(padding))
                         2 -> MessagesScreen(
                             modifier = Modifier.padding(padding),
-                            viewModel = viewModel,
+                            viewModel = loginViewModel,
                             refreshTrigger = refreshMessages,
                             onChatStatusChanged = { isVisible -> isChatDetailVisible = isVisible }
                         )
-                        3 -> ProfileScreen(modifier = Modifier.padding(padding))
+                        3 -> ProfileScreen(modifier = Modifier.padding(padding), viewModel = loginViewModel)
                     }
                 }
             }

@@ -3,6 +3,8 @@ package com.example.myapplication.ui.screen
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -64,24 +66,34 @@ fun MessageDetailScreen(modifier: Modifier = Modifier, receiver: User, onBack: (
     }
 
     Scaffold(
-        modifier = modifier,
+        modifier = modifier.imePadding(), // Added imePadding to modifier
         topBar = {
             TopAppBar(
                 title = { Text("Chat with ${receiver.name}") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Text("< Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
         }
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+        // Applied consumeWindowInsets to avoid double padding issues if Scaffold handles insets
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .consumeWindowInsets(padding) 
+                .windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+                )
+        ) {
             // Messages list
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = 16.dp),
+                reverseLayout = false // Keep standard order, but ensure scrolling to bottom if needed
             ) {
                 items(conversationMessages) { message ->
                     ChatBubble(message = message, currentUserId = currentUser?.id ?: 0)

@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 @Composable
 fun ProfileScreen(modifier: Modifier = Modifier, viewModel: LoginViewModel = viewModel()) {
     val loginState by viewModel.loginState.collectAsState()
+    val subscription by viewModel.subscription.collectAsState()
     var showEditForm by remember { mutableStateOf(false) }
 
     when (loginState) {
@@ -36,12 +37,23 @@ fun ProfileScreen(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
             val user = (loginState as LoginState.Success).user
 
             if (showEditForm) {
-                EditProfileForm(modifier = modifier, user = user, onSave = { updatedUser ->
-                    viewModel.updateUser(updatedUser)
-                    showEditForm = false
-                }, onCancel = { showEditForm = false })
+                EditProfileForm(
+                    modifier = modifier,
+                    user = user,
+                    onSave = { updatedUser ->
+                        viewModel.updateUser(updatedUser)
+                        showEditForm = false
+                    },
+                    onCancel = { showEditForm = false }
+                )
             } else {
-                ProfileView(modifier = modifier, user = user, onEdit = { showEditForm = true }, onLogout = { viewModel.logout() })
+                ProfileView(
+                    modifier = modifier,
+                    user = user,
+                    subscription = subscription,
+                    onEdit = { showEditForm = true },
+                    onLogout = { viewModel.logout() }
+                )
             }
         }
         else -> {
@@ -53,12 +65,18 @@ fun ProfileScreen(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
 }
 
 @Composable
-fun ProfileView(modifier: Modifier = Modifier, user: User, onEdit: () -> Unit, onLogout: () -> Unit) {
+fun ProfileView(
+    modifier: Modifier = Modifier,
+    user: User,
+    subscription: com.example.myapplication.data.model.Subscription? = null,
+    onEdit: () -> Unit,
+    onLogout: () -> Unit
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp)
+            .padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 16.dp) // Removed top padding
             .windowInsetsPadding(WindowInsets.systemBars),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -145,6 +163,26 @@ fun ProfileView(modifier: Modifier = Modifier, user: User, onEdit: () -> Unit, o
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Subscription Section
+        if (subscription != null) {
+            ProfileSection(title = "Subscription Details") {
+                val formattedExpiry = try {
+                    val parsedDate = java.time.LocalDate.parse(subscription.expiryDate)
+                    java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy").format(parsedDate)
+                } catch (e: Exception) {
+                    subscription.expiryDate
+                }
+                ProfileField(label = "Plan Name", value = subscription.planName)
+                ProfileField(label = "Plan Duration (Months)", value = subscription.planDurationMonths.toString())
+                ProfileField(label = "Expiry Date", value = formattedExpiry)
+                ProfileField(label = "Chat Limit", value = subscription.chatLimit.toString())
+                ProfileField(label = "Plan Chat Limit", value = subscription.planChatLimit.toString())
+            }
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
         Spacer(modifier = Modifier.height(24.dp))

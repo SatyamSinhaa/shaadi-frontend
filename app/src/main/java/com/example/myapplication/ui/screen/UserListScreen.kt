@@ -32,14 +32,30 @@ import com.example.myapplication.ui.viewmodel.LoginState
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun UserListScreen(modifier: Modifier = Modifier, viewModel: LoginViewModel = viewModel(), onChatClick: (User) -> Unit = {}) {
+fun UserListScreen(
+    modifier: Modifier = Modifier,
+    viewModel: LoginViewModel = viewModel(),
+    onChatClick: (User) -> Unit = {},
+    onUserProfileClick: (User) -> Unit = {}
+) {
     val users by viewModel.users.collectAsState()
     val loginState by viewModel.loginState.collectAsState()
+    val selectedUser by viewModel.selectedUser.collectAsState()
+    val userProfileLoading by viewModel.userProfileLoading.collectAsState(initial = false)
 
     val currentUserId = (loginState as? LoginState.Success)?.user?.id
     val filteredUsers = users.filter { it.id != currentUserId }
 
     val pagerState = rememberPagerState(pageCount = { filteredUsers.size })
+
+    // Observe selectedUser to trigger navigation
+    LaunchedEffect(selectedUser) {
+        selectedUser?.let {
+            onUserProfileClick(it)
+            // Clear the selection after navigation if needed
+            viewModel.selectUser(null)
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         if (filteredUsers.isEmpty()) {
@@ -47,6 +63,12 @@ fun UserListScreen(modifier: Modifier = Modifier, viewModel: LoginViewModel = vi
                 Text("No matches found", style = MaterialTheme.typography.bodyLarge)
             }
         } else {
+            if(userProfileLoading) {
+                // Show loading indicator when fetching user profile
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
             VerticalPager(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize()
@@ -61,6 +83,10 @@ fun UserListScreen(modifier: Modifier = Modifier, viewModel: LoginViewModel = vi
                             "Wishlist" -> viewModel.addFavourite(currentUserId ?: 0, filteredUsers[page].id)
                             // Handle other actions if needed
                         }
+                    },
+                    onClick = {
+                        // On user card click, fetch user profile
+                        viewModel.fetchUserById(filteredUsers[page].id)
                     }
                 )
             }
@@ -69,10 +95,17 @@ fun UserListScreen(modifier: Modifier = Modifier, viewModel: LoginViewModel = vi
 }
 
 @Composable
-fun FullPageUserItem(user: User, currentUserId: Int, viewModel: LoginViewModel, onAction: (String) -> Unit) {
+fun FullPageUserItem(
+    user: User,
+    currentUserId: Int,
+    viewModel: LoginViewModel,
+    onAction: (String) -> Unit,
+    onClick: () -> Unit = {}
+) {
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .clickable { onClick() }
             .background(Color.Black) // Fallback color
     ) {
         // Full screen image

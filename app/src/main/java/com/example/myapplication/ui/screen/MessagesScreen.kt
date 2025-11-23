@@ -34,8 +34,11 @@ fun MessagesScreen(
     // State to track if we are showing a chat with a specific user (passed from other screens)
     var activeChatUser by remember { mutableStateOf<User?>(null) }
 
+    // Determine if chat is visible immediately, to avoid flicker
     val isChatVisible = activeChatUser != null || selectedMessage != null
-    LaunchedEffect(isChatVisible) {
+    
+    // Use side effect to notify parent about chat visibility change
+    SideEffect {
         onChatStatusChanged(isChatVisible)
     }
 
