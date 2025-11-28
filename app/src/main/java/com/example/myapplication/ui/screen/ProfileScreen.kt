@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun ProfileScreen(modifier: Modifier = Modifier, viewModel: LoginViewModel = viewModel()) {
@@ -171,8 +172,14 @@ fun ProfileView(
         if (subscription != null) {
             ProfileSection(title = "Subscription Details") {
                 val formattedExpiry = try {
-                    val parsedDate = java.time.LocalDate.parse(subscription.expiryDate)
-                    java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy").format(parsedDate)
+                    val parsedDate = try {
+                        // Try parsing as LocalDateTime (ISO format) first
+                        java.time.LocalDateTime.parse(subscription.expiryDate).toLocalDate()
+                    } catch (e: Exception) {
+                        // Fallback to LocalDate
+                        java.time.LocalDate.parse(subscription.expiryDate)
+                    }
+                    DateTimeFormatter.ofPattern("dd MMM yyyy").format(parsedDate)
                 } catch (e: Exception) {
                     subscription.expiryDate
                 }

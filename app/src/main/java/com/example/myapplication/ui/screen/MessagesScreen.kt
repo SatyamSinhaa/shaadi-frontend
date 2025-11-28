@@ -1,16 +1,23 @@
 package com.example.myapplication.ui.screen
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.example.myapplication.data.model.Message
 import com.example.myapplication.data.model.User
 import com.example.myapplication.ui.viewmodel.LoginViewModel
@@ -160,32 +167,78 @@ fun MessageItem(user: User, lastMessage: Message?, onClick: () -> Unit) {
             .clickable { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = user.name, style = MaterialTheme.typography.bodyLarge)
-            Spacer(modifier = Modifier.height(4.dp))
-            lastMessage?.let {
-                Text(
-                    text = it.content,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
-                val displayTime = try {
-                    val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
-                    val date = dateFormat.parse(it.sentAt)
-                    timeFormat.format(date)
-                } catch (e: Exception) {
-                    it.sentAt // fallback to original if parsing fails
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Profile Image
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                if (user.photoUrl != null) {
+                    AsyncImage(
+                        model = user.photoUrl,
+                        contentDescription = "Profile Photo",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Text(
+                        text = user.name.firstOrNull()?.toString() ?: "?",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // Content
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
                 Text(
-                    text = displayTime,
-                    style = MaterialTheme.typography.bodySmall
+                    text = user.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
                 )
-            } ?: Text(
-                text = "No messages yet",
-                style = MaterialTheme.typography.bodyMedium
-            )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                lastMessage?.let {
+                    Text(
+                        text = it.content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
+                    val displayTime = try {
+                        val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+                        val date = dateFormat.parse(it.sentAt)
+                        timeFormat.format(date)
+                    } catch (e: Exception) {
+                        it.sentAt // fallback to original if parsing fails
+                    }
+                    Text(
+                        text = displayTime,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } ?: Text(
+                    text = "No messages yet",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

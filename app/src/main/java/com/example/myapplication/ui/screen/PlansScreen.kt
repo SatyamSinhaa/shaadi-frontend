@@ -3,6 +3,8 @@ package com.example.myapplication.ui.screen
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,14 +23,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.data.model.Plan
+import com.example.myapplication.data.model.Subscription
+import com.example.myapplication.ui.viewmodel.LoginViewModel
 import com.example.myapplication.ui.viewmodel.PlansViewModel
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PlansScreen(
     modifier: Modifier = Modifier,
     onBack: () -> Unit,
-    viewModel: PlansViewModel = viewModel()
+    viewModel: PlansViewModel = viewModel(),
+    loginViewModel: LoginViewModel = viewModel()
 ) {
     val plans by viewModel.plans.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -110,6 +118,36 @@ fun PlansScreen(
 }
 
 @Composable
+fun SubscriptionHistoryItem(subscription: Subscription) {
+    Column(modifier = Modifier.fillMaxWidth().padding(4.dp)) {
+        Text(
+            text = subscription.planName,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+             val formattedDate = try {
+                val parsedDate = try {
+                    LocalDateTime.parse(subscription.startDate).toLocalDate()
+                } catch (e: Exception) {
+                    LocalDate.parse(subscription.startDate)
+                }
+                DateTimeFormatter.ofPattern("dd MMM yyyy").format(parsedDate)
+            } catch (e: Exception) {
+                subscription.startDate
+            }
+            
+            Text("Started: $formattedDate", style = MaterialTheme.typography.bodySmall)
+            Text(subscription.status, style = MaterialTheme.typography.labelMedium, color = if(subscription.status.equals("ACTIVE", ignoreCase = true)) Color.Green else Color.Gray)
+        }
+    }
+}
+
+@Composable
 fun PlanCard(plan: Plan) {
     Card(
         modifier = Modifier
@@ -146,7 +184,7 @@ fun PlanCard(plan: Plan) {
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "$${plan.price}",
+                        text = "₹${plan.price}",
                         style = MaterialTheme.typography.displayMedium,
                         color = Color.White,
                         fontWeight = FontWeight.ExtraBold

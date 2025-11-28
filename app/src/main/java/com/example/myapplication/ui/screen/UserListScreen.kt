@@ -81,7 +81,7 @@ fun UserListScreen(
                         when (action) {
                             "Chat" -> onChatClick(filteredUsers[page])
                             "Wishlist" -> viewModel.addFavourite(currentUserId ?: 0, filteredUsers[page].id)
-                            // Handle other actions if needed
+                            // Removed Interest and Shortlist as requested
                         }
                     },
                     onClick = {
@@ -169,8 +169,9 @@ fun FullPageUserItem(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "${user.gender ?: ""} • ${user.religion ?: ""} • ${user.caste ?: ""}",
+                text = "${user.religion ?: ""} • ${user.caste ?: ""}",
                 style = MaterialTheme.typography.bodyMedium,
+
                 color = Color.White.copy(alpha = 0.8f)
             )
              Spacer(modifier = Modifier.height(4.dp))
@@ -191,19 +192,9 @@ fun FullPageUserItem(
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 ActionButton(
-                    icon = Icons.Filled.Send, // Using Send for Interest based on screenshot
-                    label = "Interest",
-                    onClick = { onAction("Interest") }
-                )
-                ActionButton(
                     icon = Icons.Filled.FavoriteBorder,
                     label = "Wishlist",
                     onClick = { onAction("Wishlist") }
-                )
-                ActionButton(
-                    icon = Icons.Filled.StarBorder,
-                    label = "Shortlist",
-                    onClick = { onAction("Shortlist") }
                 )
                 ActionButton(
                     icon = Icons.Filled.ChatBubbleOutline,

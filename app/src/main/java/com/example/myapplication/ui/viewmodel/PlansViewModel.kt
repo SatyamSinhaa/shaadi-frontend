@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.api.RetrofitClient
 import com.example.myapplication.data.model.Plan
+import com.example.myapplication.data.model.Subscription
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -17,6 +18,12 @@ class PlansViewModel : ViewModel() {
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
+    
+    private val _subscriptionHistory = MutableStateFlow<List<Subscription>>(emptyList())
+    val subscriptionHistory: StateFlow<List<Subscription>> = _subscriptionHistory
+    
+    private val _historyLoading = MutableStateFlow(false)
+    val historyLoading: StateFlow<Boolean> = _historyLoading
 
     init {
         fetchPlans()
@@ -29,7 +36,9 @@ class PlansViewModel : ViewModel() {
             try {
                 val response = RetrofitClient.apiService.getAllPlans()
                 if (response.isSuccessful) {
-                    _plans.value = response.body() ?: emptyList()
+                    val allPlans = response.body() ?: emptyList()
+                    // Filter only published plans
+                    _plans.value = allPlans.filter { it.isPublished }
                 } else {
                     _error.value = "Failed to fetch plans: ${response.errorBody()?.string()}"
                 }
@@ -39,5 +48,27 @@ class PlansViewModel : ViewModel() {
                 _isLoading.value = false
             }
         }
+    }
+
+    fun fetchSubscriptionHistory(userId: Int) {
+        viewModelScope.launch {
+            _historyLoading.value = true
+            try {
+                val response = RetrofitClient.apiService.getSubscriptionHistory(userId)
+                if (response.isSuccessful) {
+                    _subscriptionHistory.value = response.body() ?: emptyList()
+                } else {
+                    // handle error silently or show toast if needed
+                }
+            } catch (e: Exception) {
+                // handle exception
+            } finally {
+                _historyLoading.value = false
+            }
+        }
+    }
+    
+    fun clearHistory() {
+        _subscriptionHistory.value = emptyList()
     }
 }

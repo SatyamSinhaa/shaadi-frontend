@@ -2,24 +2,25 @@ package com.example.myapplication.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.myapplication.data.api.ApiService
 import com.example.myapplication.data.api.RetrofitClient
-import com.example.myapplication.data.model.ErrorResponse
 import com.example.myapplication.data.model.User
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import retrofit2.Response
 
-class SearchViewModel : ViewModel() {
+class SearchViewModel(private val apiService: ApiService = RetrofitClient.apiService) : ViewModel() {
 
     private val _searchResults = MutableStateFlow<List<User>>(emptyList())
-    val searchResults: StateFlow<List<User>> = _searchResults
+    val searchResults: StateFlow<List<User>> = _searchResults.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error
+    val error: StateFlow<String?> = _error.asStateFlow()
 
     fun searchUsers(
         minAge: Int? = null,
@@ -29,30 +30,22 @@ class SearchViewModel : ViewModel() {
         religion: String? = null,
         gender: String? = null
     ) {
-        _isLoading.value = true
-        _error.value = null
-
         viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
             try {
-                val response: Response<List<User>> = RetrofitClient.apiService.searchUsers(
-                    minAge, maxAge, name, location, religion, gender
+                val response: Response<List<User>> = apiService.searchUsers(
+                    minAge = minAge,
+                    maxAge = maxAge,
+                    name = name,
+                    location = location,
+                    religion = religion,
+                    gender = gender
                 )
-
                 if (response.isSuccessful) {
                     response.body()?.let { _searchResults.value = it }
                 } else {
-                    val errorBody = response.errorBody()?.string()
-                    val errorMessage = if (errorBody != null) {
-                        try {
-                            val errorResponse = RetrofitClient.gson.fromJson(errorBody, ErrorResponse::class.java)
-                            errorResponse.error
-                        } catch (e: Exception) {
-                            "Search failed: ${response.message()}"
-                        }
-                    } else {
-                        "Search failed: ${response.message()}"
-                    }
-                    _error.value = errorMessage
+                    _error.value = "Search failed: ${response.message()}"
                 }
             } catch (e: Exception) {
                 _error.value = "Search failed: ${e.localizedMessage ?: "Unknown error"}"
@@ -60,5 +53,9 @@ class SearchViewModel : ViewModel() {
                 _isLoading.value = false
             }
         }
+    }
+
+    fun clearResults() {
+        _searchResults.value = emptyList()
     }
 }

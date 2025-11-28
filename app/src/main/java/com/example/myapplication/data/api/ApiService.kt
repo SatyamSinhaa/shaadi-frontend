@@ -62,4 +62,7 @@ interface ApiService {
 
     @GET("api/users/{userId}/subscription")
     suspend fun getSubscription(@Path("userId") userId: Int): Response<Subscription>
+
+    @GET("api/users/{userId}/subscription-history")
+    suspend fun getSubscriptionHistory(@Path("userId") userId: Int): Response<List<Subscription>>
 }

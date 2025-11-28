@@ -8,8 +8,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
@@ -19,6 +23,7 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.History
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.data.api.RetrofitClient
 import kotlinx.coroutines.CoroutineScope
@@ -48,6 +53,8 @@ import com.example.myapplication.ui.screen.SearchScreen
 import com.example.myapplication.ui.screen.PlansScreen
 import com.example.myapplication.ui.screen.UserListScreen
 import com.example.myapplication.ui.screen.UserProfileScreen
+import com.example.myapplication.ui.screen.SubscriptionHistoryScreen
+import com.example.myapplication.ui.screen.SubscriptionHistoryItem
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import com.example.myapplication.ui.viewmodel.LoginState
 import com.example.myapplication.ui.viewmodel.LoginViewModel
@@ -89,6 +96,7 @@ fun AppNavigation(
     var showPlans by remember { mutableStateOf(false) }
     var showChatDetail by remember { mutableStateOf<User?>(null) }
     var showUserProfile by remember { mutableStateOf<User?>(null) }
+    var showHistory by remember { mutableStateOf(false) }
 
     // State to control bottom bar visibility
     var isChatDetailVisible by remember { mutableStateOf(false) }
@@ -166,6 +174,13 @@ fun AppNavigation(
             } else if (selectedUserValue != null) {
                 BackHandler { loginViewModel.selectUser(null) }
                 UserProfileScreen(modifier = modifier, user = selectedUserValue, onBack = { loginViewModel.selectUser(null) })
+            } else if (showHistory) {
+                BackHandler { showHistory = false }
+                SubscriptionHistoryScreen(
+                    modifier = modifier,
+                    onBack = { showHistory = false },
+                    viewModel = plansViewModel
+                )
             } else if (showPlans) {
                 BackHandler { showPlans = false }
                 Scaffold(
@@ -175,10 +190,10 @@ fun AppNavigation(
                             title = { Text("Shaadi App") },
                             actions = {
                                 IconButton(onClick = {
-                                    loginViewModel.fetchFavourites(currentUser.id)
-                                    showFavourites = true
+                                    plansViewModel.fetchSubscriptionHistory(currentUser.id)
+                                    showHistory = true
                                 }) {
-                                    Icon(Icons.Filled.Favorite, contentDescription = "Favourites")
+                                    Icon(Icons.Filled.History, contentDescription = "History")
                                 }
                             }
                         )
@@ -450,6 +465,8 @@ fun AppNavigation(
                         }
                     }
                 ) { padding ->
+                    // Removed inline dialog logic here
+                    
                     when (selectedTab) {
                         0 -> UserListScreen(
                             modifier = Modifier.padding(padding),
