@@ -18,8 +18,8 @@ import androidx.compose.runtime.LaunchedEffect
 
 @Composable
 fun LoginScreen(modifier: Modifier = Modifier, onRegisterClick: () -> Unit, viewModel: LoginViewModel = viewModel(), registrationSuccessMessage: String? = null, onMessageShown: () -> Unit = {}) {
-    var email by remember { mutableStateOf("user1@test.com") }
-    var password by remember { mutableStateOf("pass123") }
+    var email by remember { mutableStateOf("user1@gmail.com") }
+    var password by remember { mutableStateOf("123") }
     val loginState by viewModel.loginState.collectAsState()
     val users by viewModel.users.collectAsState()
 

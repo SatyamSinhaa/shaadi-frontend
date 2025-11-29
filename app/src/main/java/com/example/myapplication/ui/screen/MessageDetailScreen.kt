@@ -34,9 +34,12 @@ fun MessageDetailScreen(modifier: Modifier = Modifier, receiver: User, onBack: (
 
     val currentUser = (loginState as? LoginState.Success)?.user
 
-    // Refresh messages when entering chat
+    // Refresh messages when entering chat and mark as read
     LaunchedEffect(currentUser, receiver) {
-        currentUser?.let { viewModel.fetchMessages(it.id) }
+        currentUser?.let {
+            // Mark messages as read (this will also fetch updated messages)
+            viewModel.markMessagesAsRead(it.id, receiver.id)
+        }
     }
 
     // Show error dialog when sendMessageError is set

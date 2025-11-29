@@ -3,12 +3,12 @@ package com.example.myapplication.ui.screen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.*
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,32 +27,37 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import java.time.format.DateTimeFormatter
 
+enum class EditSection {
+    NONE, BASIC_INFO, PERSONAL_DETAILS, LOCATION, ABOUT_ME
+}
+
 @Composable
 fun ProfileScreen(modifier: Modifier = Modifier, viewModel: LoginViewModel = viewModel()) {
     val loginState by viewModel.loginState.collectAsState()
     val subscription by viewModel.subscription.collectAsState()
-    var showEditForm by remember { mutableStateOf(false) }
+    var currentEditSection by remember { mutableStateOf(EditSection.NONE) }
 
     when (loginState) {
         is LoginState.Success -> {
             val user = (loginState as LoginState.Success).user
 
-            if (showEditForm) {
-                EditProfileForm(
+            if (currentEditSection != EditSection.NONE) {
+                SectionEditForm(
                     modifier = modifier,
                     user = user,
+                    section = currentEditSection,
                     onSave = { updatedUser ->
                         viewModel.updateUser(updatedUser)
-                        showEditForm = false
+                        currentEditSection = EditSection.NONE
                     },
-                    onCancel = { showEditForm = false }
+                    onCancel = { currentEditSection = EditSection.NONE }
                 )
             } else {
                 ProfileView(
                     modifier = modifier,
                     user = user,
                     subscription = subscription,
-                    onEdit = { showEditForm = true },
+                    onEditSection = { section -> currentEditSection = section },
                     onLogout = { viewModel.logout() }
                 )
             }
@@ -70,7 +75,7 @@ fun ProfileView(
     modifier: Modifier = Modifier,
     user: User,
     subscription: com.example.myapplication.data.model.Subscription? = null,
-    onEdit: () -> Unit,
+    onEditSection: (EditSection) -> Unit,
     onLogout: () -> Unit
 ) {
     Column(
@@ -87,7 +92,7 @@ fun ProfileView(
             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
             content = {
                 Column(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     // Profile Photo
@@ -130,8 +135,25 @@ fun ProfileView(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Bio Section
+        ProfileSection(
+            title = "About Me",
+            onEdit = { onEditSection(EditSection.ABOUT_ME) }
+        ) {
+            Text(
+                text = user.bio ?: "No bio available",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         // Basic Info Section
-        ProfileSection(title = "Basic Information") {
+        ProfileSection(
+            title = "Basic Information",
+            onEdit = { onEditSection(EditSection.BASIC_INFO) }
+        ) {
             ProfileField(label = "Age", value = user.age?.toString())
             ProfileField(label = "Gender", value = user.gender)
         }
@@ -139,7 +161,10 @@ fun ProfileView(
         Spacer(modifier = Modifier.height(16.dp))
 
         // Personal Details Section
-        ProfileSection(title = "Personal Details") {
+        ProfileSection(
+            title = "Personal Details",
+            onEdit = { onEditSection(EditSection.PERSONAL_DETAILS) }
+        ) {
             ProfileField(label = "Gotr", value = user.gotr)
             ProfileField(label = "Caste", value = user.caste)
             ProfileField(label = "Category", value = user.category)
@@ -149,21 +174,13 @@ fun ProfileView(
         Spacer(modifier = Modifier.height(16.dp))
 
         // Location Section
-        ProfileSection(title = "Location") {
+        ProfileSection(
+            title = "Location",
+            onEdit = { onEditSection(EditSection.LOCATION) }
+        ) {
             ProfileField(label = "City/Town", value = user.cityTown)
             ProfileField(label = "District", value = user.district)
             ProfileField(label = "State", value = user.state)
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Bio Section
-        ProfileSection(title = "About Me") {
-            Text(
-                text = user.bio ?: "No bio available",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.fillMaxWidth()
-            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -199,14 +216,6 @@ fun ProfileView(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Button(
-                onClick = onEdit,
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Filled.Edit, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Edit Profile")
-            }
             OutlinedButton(
                 onClick = onLogout,
                 modifier = Modifier.weight(1f)
@@ -220,18 +229,33 @@ fun ProfileView(
 }
 
 @Composable
-fun ProfileSection(title: String, content: @Composable () -> Unit) {
+fun ProfileSection(title: String, onEdit: (() -> Unit)? = null, content: @Composable () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         content = {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (onEdit != null) {
+                        IconButton(onClick = onEdit, modifier = Modifier.size(24.dp)) {
+                            Icon(
+                                imageVector = Icons.Filled.Edit,
+                                contentDescription = "Edit $title",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
                 content()
             }
         }
@@ -240,41 +264,46 @@ fun ProfileSection(title: String, content: @Composable () -> Unit) {
 
 @Composable
 fun ProfileField(label: String, value: String?) {
-    if (value != null) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = "$label:",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = "$label:",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium
+        )
+        Text(
+            text = if (value.isNullOrBlank()) "-" else value,
+            style = MaterialTheme.typography.bodyMedium
+        )
     }
 }
 
 @Composable
-fun EditProfileForm(modifier: Modifier = Modifier, user: User, onSave: (User) -> Unit, onCancel: () -> Unit) {
-    var name by remember { mutableStateOf(user.name) }
-    var email by remember { mutableStateOf(user.email) }
+fun SectionEditForm(
+    modifier: Modifier = Modifier,
+    user: User,
+    section: EditSection,
+    onSave: (User) -> Unit,
+    onCancel: () -> Unit
+) {
+    // Local state for all fields, we'll only show relevant ones based on section
     var age by remember { mutableStateOf(user.age?.toString() ?: "") }
     var gender by remember { mutableStateOf(user.gender ?: "") }
+    
     var gotr by remember { mutableStateOf(user.gotr ?: "") }
     var caste by remember { mutableStateOf(user.caste ?: "") }
     var category by remember { mutableStateOf(user.category ?: "") }
     var religion by remember { mutableStateOf(user.religion ?: "") }
+    
     var cityTown by remember { mutableStateOf(user.cityTown ?: "") }
     var district by remember { mutableStateOf(user.district ?: "") }
     var state by remember { mutableStateOf(user.state ?: "") }
+    
     var bio by remember { mutableStateOf(user.bio ?: "") }
-    var photoUrl by remember { mutableStateOf(user.photoUrl ?: "") }
 
     Column(
         modifier = modifier
@@ -285,85 +314,87 @@ fun EditProfileForm(modifier: Modifier = Modifier, user: User, onSave: (User) ->
             .windowInsetsPadding(WindowInsets.systemBars),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text("Name") },
-            modifier = Modifier.fillMaxWidth()
+        Text(
+            text = "Edit ${section.name.replace("_", " ").lowercase().capitalize(java.util.Locale.ROOT)}",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 16.dp)
         )
-        OutlinedTextField(
-            value = email,
-            onValueChange = { email = it },
-            label = { Text("Email") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = age,
-            onValueChange = { age = it },
-            label = { Text("Age") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = gender,
-            onValueChange = { gender = it },
-            label = { Text("Gender") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = gotr,
-            onValueChange = { gotr = it },
-            label = { Text("Gotr") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = caste,
-            onValueChange = { caste = it },
-            label = { Text("Caste") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = category,
-            onValueChange = { category = it },
-            label = { Text("Category") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = religion,
-            onValueChange = { religion = it },
-            label = { Text("Religion") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = cityTown,
-            onValueChange = { cityTown = it },
-            label = { Text("City/Town") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = district,
-            onValueChange = { district = it },
-            label = { Text("District") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = state,
-            onValueChange = { state = it },
-            label = { Text("State") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = bio,
-            onValueChange = { bio = it },
-            label = { Text("Bio") },
-            modifier = Modifier.fillMaxWidth(),
-            maxLines = 3
-        )
-        OutlinedTextField(
-            value = photoUrl,
-            onValueChange = { photoUrl = it },
-            label = { Text("Photo URL") },
-            modifier = Modifier.fillMaxWidth()
-        )
+
+        when (section) {
+            EditSection.BASIC_INFO -> {
+                OutlinedTextField(
+                    value = age,
+                    onValueChange = { age = it },
+                    label = { Text("Age") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = gender,
+                    onValueChange = { gender = it },
+                    label = { Text("Gender") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            EditSection.PERSONAL_DETAILS -> {
+                OutlinedTextField(
+                    value = gotr,
+                    onValueChange = { gotr = it },
+                    label = { Text("Gotr") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = caste,
+                    onValueChange = { caste = it },
+                    label = { Text("Caste") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = category,
+                    onValueChange = { category = it },
+                    label = { Text("Category") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = religion,
+                    onValueChange = { religion = it },
+                    label = { Text("Religion") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            EditSection.LOCATION -> {
+                OutlinedTextField(
+                    value = cityTown,
+                    onValueChange = { cityTown = it },
+                    label = { Text("City/Town") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = district,
+                    onValueChange = { district = it },
+                    label = { Text("District") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = state,
+                    onValueChange = { state = it },
+                    label = { Text("State") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            EditSection.ABOUT_ME -> {
+                OutlinedTextField(
+                    value = bio,
+                    onValueChange = { bio = it },
+                    label = { Text("Bio") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 5
+                )
+            }
+            else -> {}
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -371,21 +402,28 @@ fun EditProfileForm(modifier: Modifier = Modifier, user: User, onSave: (User) ->
         ) {
             Button(
                 onClick = {
-                    val updatedUser = user.copy(
-                        name = name,
-                        email = email,
-                        age = age.toIntOrNull(),
-                        gender = gender.takeIf { it.isNotBlank() },
-                        gotr = gotr.takeIf { it.isNotBlank() },
-                        caste = caste.takeIf { it.isNotBlank() },
-                        category = category.takeIf { it.isNotBlank() },
-                        religion = religion.takeIf { it.isNotBlank() },
-                        cityTown = cityTown.takeIf { it.isNotBlank() },
-                        district = district.takeIf { it.isNotBlank() },
-                        state = state.takeIf { it.isNotBlank() },
-                        bio = bio.takeIf { it.isNotBlank() },
-                        photoUrl = photoUrl.takeIf { it.isNotBlank() }
-                    )
+                    // Create updated user based on the section being edited
+                    val updatedUser = when (section) {
+                        EditSection.BASIC_INFO -> user.copy(
+                            age = age.toIntOrNull(),
+                            gender = gender.takeIf { it.isNotBlank() }
+                        )
+                        EditSection.PERSONAL_DETAILS -> user.copy(
+                            gotr = gotr.takeIf { it.isNotBlank() },
+                            caste = caste.takeIf { it.isNotBlank() },
+                            category = category.takeIf { it.isNotBlank() },
+                            religion = religion.takeIf { it.isNotBlank() }
+                        )
+                        EditSection.LOCATION -> user.copy(
+                            cityTown = cityTown.takeIf { it.isNotBlank() },
+                            district = district.takeIf { it.isNotBlank() },
+                            state = state.takeIf { it.isNotBlank() }
+                        )
+                        EditSection.ABOUT_ME -> user.copy(
+                            bio = bio.takeIf { it.isNotBlank() }
+                        )
+                        else -> user
+                    }
                     onSave(updatedUser)
                 },
                 modifier = Modifier.weight(1f)

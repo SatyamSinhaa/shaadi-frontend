@@ -92,40 +92,41 @@ fun UserProfileScreen(modifier: Modifier = Modifier, user: User?, onBack: () -> 
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Bio Section
+            if (user.bio != null) {
+                ProfileSection(title = "About Me") {
+                    Text(
+                        text = user.bio,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             // Basic Info Section
             ProfileSection(title = "Basic Information") {
-                ProfileField(label = "Age", value = user.age?.toString())
-                ProfileField(label = "Gender", value = user.gender)
+                if (user.age != null) ProfileField(label = "Age", value = user.age.toString())
+                if (user.gender != null) ProfileField(label = "Gender", value = user.gender)
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             // Personal Details Section
             ProfileSection(title = "Personal Details") {
-                ProfileField(label = "Gotr", value = user.gotr)
-                ProfileField(label = "Caste", value = user.caste)
-                ProfileField(label = "Category", value = user.category)
-                ProfileField(label = "Religion", value = user.religion)
+                if (user.gotr != null) ProfileField(label = "Gotr", value = user.gotr)
+                if (user.caste != null) ProfileField(label = "Caste", value = user.caste)
+                if (user.category != null) ProfileField(label = "Category", value = user.category)
+                if (user.religion != null) ProfileField(label = "Religion", value = user.religion)
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             // Location Section
             ProfileSection(title = "Location") {
-                ProfileField(label = "City/Town", value = user.cityTown)
-                ProfileField(label = "District", value = user.district)
-                ProfileField(label = "State", value = user.state)
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Bio Section
-            ProfileSection(title = "About Me") {
-                Text(
-                    text = user.bio ?: "No bio available",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                if (user.cityTown != null) ProfileField(label = "City/Town", value = user.cityTown)
+                if (user.district != null) ProfileField(label = "District", value = user.district)
+                if (user.state != null) ProfileField(label = "State", value = user.state)
             }
         }
     }

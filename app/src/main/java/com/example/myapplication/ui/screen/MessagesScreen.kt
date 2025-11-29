@@ -141,15 +141,21 @@ fun MessagesScreen(
                     val uniqueUsers = messages
                         .map { if (it.sender.id == currentUser.id) it.receiver else it.sender }
                         .distinctBy { it.id }
+                        .sortedByDescending { user ->
+                            // Sort users by the timestamp of the latest message
+                            messages
+                                .filter { (it.sender.id == currentUser.id && it.receiver.id == user.id) || (it.sender.id == user.id && it.receiver.id == currentUser.id) }
+                                .maxOfOrNull { it.sentAt }
+                        }
 
                     LazyColumn(
                         contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
                         items(uniqueUsers) { user ->
-                            val lastMessage = messages
-                                .filter { (it.sender.id == currentUser.id && it.receiver.id == user.id) || (it.sender.id == user.id && it.receiver.id == currentUser.id) }
-                                .maxByOrNull { it.sentAt }
-                            MessageItem(user = user, lastMessage = lastMessage, onClick = { selectedMessage = lastMessage })
+                            val conversationMessages = messages.filter { (it.sender.id == currentUser.id && it.receiver.id == user.id) || (it.sender.id == user.id && it.receiver.id == currentUser.id) }
+                            val lastMessage = conversationMessages.maxByOrNull { it.sentAt }
+                            val unreadCount = conversationMessages.count { it.receiver.id == currentUser.id && !it.read }
+                            MessageItem(user = user, lastMessage = lastMessage, unreadCount = unreadCount, onClick = { selectedMessage = lastMessage })
                             Spacer(modifier = Modifier.height(8.dp))
                         }
                     }
@@ -160,7 +166,7 @@ fun MessagesScreen(
 }
 
 @Composable
-fun MessageItem(user: User, lastMessage: Message?, onClick: () -> Unit) {
+fun MessageItem(user: User, lastMessage: Message?, unreadCount: Int = 0, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -238,6 +244,25 @@ fun MessageItem(user: User, lastMessage: Message?, onClick: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            // Unread count badge
+            if (unreadCount > 0) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }

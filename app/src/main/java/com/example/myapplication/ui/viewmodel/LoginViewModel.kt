@@ -300,6 +300,20 @@ class LoginViewModel(private val apiService: ApiService = RetrofitClient.apiServ
     fun clearSendMessageError() {
         _sendMessageError.value = null
     }
+
+    fun markMessagesAsRead(receiverId: Int, senderId: Int) {
+        viewModelScope.launch {
+            try {
+                val response = apiService.markMessagesAsRead(receiverId, senderId)
+                if (response.isSuccessful) {
+                    // Refresh messages after marking as read
+                    fetchMessages(receiverId)
+                }
+            } catch (e: Exception) {
+                // Handle error if needed
+            }
+        }
+    }
 }
 
 sealed class LoginState {

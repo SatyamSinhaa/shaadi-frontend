@@ -213,9 +213,6 @@ fun PlanCard(plan: Plan) {
                     Spacer(modifier = Modifier.height(12.dp))
                     PlanFeature(text = "Duration: ${plan.durationMonths} Months")
                     Spacer(modifier = Modifier.height(12.dp))
-                    PlanFeature(text = "Premium Support") // Static feature as example
-                    Spacer(modifier = Modifier.height(12.dp))
-                    PlanFeature(text = "Profile Boost") // Static feature as example
                     
                     if (plan.isAddon) {
                         Spacer(modifier = Modifier.height(12.dp))

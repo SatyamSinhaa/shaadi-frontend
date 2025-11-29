@@ -5,5 +5,6 @@ data class Message(
     val sender: User,
     val receiver: User,
     val content: String,
-    val sentAt: String
+    val sentAt: String,
+    val read: Boolean = false
 )

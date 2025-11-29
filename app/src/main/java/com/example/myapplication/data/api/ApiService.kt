@@ -48,6 +48,9 @@ interface ApiService {
     @POST("api/chat")
     suspend fun sendMessage(@Body message: Message): Response<Message>
 
+    @POST("api/chat/mark-read/{receiverId}/{senderId}")
+    suspend fun markMessagesAsRead(@Path("receiverId") receiverId: Int, @Path("senderId") senderId: Int): Response<Unit>
+
     @POST("api/users/register")
     suspend fun register(@Body registerDto: RegisterDto): Response<User>
 

@@ -250,8 +250,11 @@ fun AppNavigation(
                                 label = { Text("Profile") }
                             )
                             NavigationBarItem(
-                                selected = false,
-                                onClick = { showPlans = true },
+                                selected = true,
+                                onClick = { 
+                                    showPlans = true
+                                    selectedTab = -1
+                                },
                                 icon = { Icon(Icons.Filled.Star, contentDescription = "Premium Membership") },
                                 label = { Text("Premium") }
                             )
@@ -314,6 +317,8 @@ fun AppNavigation(
                                 selected = false,
                                 onClick = {
                                    showPlans = true
+                                   showFavourites = false
+                                   selectedTab = -1
                                 },
                                 icon = { Icon(Icons.Filled.Star, contentDescription = "Premium Membership") },
                                 label = { Text("Premium") }
@@ -375,7 +380,11 @@ fun AppNavigation(
                             )
                             NavigationBarItem(
                                 selected = false,
-                                onClick = { /* TODO: Implement premium membership */ },
+                                onClick = { 
+                                    showPlans = true
+                                    showMessages = false
+                                    selectedTab = -1
+                                },
                                 icon = { Icon(Icons.Filled.Star, contentDescription = "Premium Membership") },
                                 label = { Text("Premium") }
                             )
@@ -457,7 +466,10 @@ fun AppNavigation(
                                 )
                                 NavigationBarItem(
                                     selected = false,
-                                    onClick = { showPlans = true },
+                                    onClick = { 
+                                        showPlans = true
+                                        selectedTab = -1
+                                    },
                                     icon = { Icon(Icons.Filled.Star, contentDescription = "Premium Membership") },
                                     label = { Text("Premium") }
                                 )
@@ -465,8 +477,6 @@ fun AppNavigation(
                         }
                     }
                 ) { padding ->
-                    // Removed inline dialog logic here
-                    
                     when (selectedTab) {
                         0 -> UserListScreen(
                             modifier = Modifier.padding(padding),
