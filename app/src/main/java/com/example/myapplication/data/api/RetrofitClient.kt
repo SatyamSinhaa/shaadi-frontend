@@ -5,8 +5,8 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 object RetrofitClient {
-    // Backend hosted on Render
-    private const val BASE_URL = "https://shaadi-backend-g6od.onrender.com/"
+    // Local backend for development (Android emulator uses 10.0.2.2 for localhost)
+    private const val BASE_URL = "http://10.0.2.2:8080/"
 
     val gson = Gson()
 
