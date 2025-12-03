@@ -5,8 +5,8 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 object RetrofitClient {
-    // Changed to localhost as requested. Note: On standard Android Emulator, use 10.0.2.2 instead of localhost.
-    private const val BASE_URL = "http://10.0.2.2:8080/"
+    // Backend hosted on Render
+    private const val BASE_URL = "https://shaadi-backend-g6od.onrender.com/"
 
     val gson = Gson()
 
