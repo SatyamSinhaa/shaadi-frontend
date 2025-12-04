@@ -42,11 +42,17 @@ fun FilterSectionButton(text: String, isSelected: Boolean, onClick: () -> Unit, 
 }
 
 @Composable
-fun SearchScreen(modifier: Modifier = Modifier, viewModel: SearchViewModel = viewModel(), loginViewModel: LoginViewModel = viewModel()) {
+fun SearchScreen(
+    modifier: Modifier = Modifier,
+    viewModel: SearchViewModel = viewModel(),
+    loginViewModel: LoginViewModel = viewModel(),
+    onUserProfileClick: (User) -> Unit = {}
+) {
     val searchResults by viewModel.searchResults.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val loginState by loginViewModel.loginState.collectAsState()
+    val selectedUser by loginViewModel.selectedUser.collectAsState()
 
     val currentUserId = (loginState as? LoginState.Success)?.user?.id
     val filteredSearchResults = searchResults.filter { it.id != currentUserId }
@@ -83,6 +89,14 @@ fun SearchScreen(modifier: Modifier = Modifier, viewModel: SearchViewModel = vie
             religion = religion.takeIf { it.isNotBlank() },
             gender = oppositeGender
         )
+    }
+
+    // Handle user selection navigation
+    LaunchedEffect(selectedUser) {
+        selectedUser?.let {
+            onUserProfileClick(it)
+            loginViewModel.selectUser(null)
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -154,7 +168,9 @@ fun SearchScreen(modifier: Modifier = Modifier, viewModel: SearchViewModel = vie
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
                     items(filteredSearchResults) { user ->
-                        UserItem(user) { /* TODO: Handle click */ }
+                        UserItem(user) { 
+                            loginViewModel.fetchUserById(user.id)
+                        }
                     }
                 }
             } else if (!isLoading && error == null) {
@@ -270,7 +286,7 @@ fun SearchScreen(modifier: Modifier = Modifier, viewModel: SearchViewModel = vie
                                     OutlinedTextField(
                                         value = cityTown,
                                         onValueChange = { cityTown = it },
-                                        label = { Text("City/Village") },
+                                        label = { Text("City/Town") },
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
@@ -302,13 +318,6 @@ fun SearchScreen(modifier: Modifier = Modifier, viewModel: SearchViewModel = vie
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
                                     OutlinedTextField(
-                                        value = gotr,
-                                        onValueChange = { gotr = it },
-                                        label = { Text("Gotr") },
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    OutlinedTextField(
                                         value = caste,
                                         onValueChange = { caste = it },
                                         label = { Text("Caste") },
@@ -316,53 +325,31 @@ fun SearchScreen(modifier: Modifier = Modifier, viewModel: SearchViewModel = vie
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
                                     OutlinedTextField(
-                                        value = category,
-                                        onValueChange = { category = it },
-                                        label = { Text("Category") },
+                                        value = gotr,
+                                        onValueChange = { gotr = it },
+                                        label = { Text("Gotr") },
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 }
-                                null -> {
+                                else -> {
                                     Text(
-                                        text = "Select a filter section to view options",
+                                        text = "Select a category to filter",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = Color.Gray
                                     )
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.weight(1f))
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            Button(
+                                onClick = {
+                                    performSearch()
+                                    showFilterDrawer = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Button(
-                                    onClick = {
-                                        showFilterDrawer = false
-                                        performSearch()
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Apply")
-                                }
-                                OutlinedButton(
-                                    onClick = {
-                                        minAge = ""
-                                        maxAge = ""
-                                        religion = ""
-                                        gotr = ""
-                                        caste = ""
-                                        category = ""
-                                        cityTown = ""
-                                        district = ""
-                                        state = ""
-                                        selectedFilterSection = null
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Clear")
-                                }
+                                Text("Apply")
                             }
                         }
                     }

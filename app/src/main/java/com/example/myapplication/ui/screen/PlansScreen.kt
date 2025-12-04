@@ -26,6 +26,7 @@ import com.example.myapplication.data.model.Plan
 import com.example.myapplication.data.model.Subscription
 import com.example.myapplication.ui.viewmodel.LoginViewModel
 import com.example.myapplication.ui.viewmodel.PlansViewModel
+import com.example.myapplication.ui.viewmodel.LoginState
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -41,75 +42,99 @@ fun PlansScreen(
     val plans by viewModel.plans.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
+    val loginState by loginViewModel.loginState.collectAsState()
+    
+    var selectedPlan by remember { mutableStateOf<Plan?>(null) }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        when {
-            isLoading -> {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+    // If a plan is selected, show PaymentScreen
+    if (selectedPlan != null) {
+        PaymentScreen(
+            plan = selectedPlan!!,
+            viewModel = viewModel,
+            onBack = { 
+                selectedPlan = null 
+                viewModel.resetPurchaseState()
+            },
+            onActivate = {
+                val userId = (loginState as? LoginState.Success)?.user?.id
+                if (userId != null) {
+                    viewModel.purchaseSubscription(userId, selectedPlan!!.id)
+                }
             }
-            error != null -> {
-                Text(
-                    text = error ?: "Unknown error",
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            }
-            else -> {
-                if (plans.isNotEmpty()) {
-                    val pagerState = rememberPagerState(pageCount = { plans.size })
-                    
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Top
-                    ) {
-                        Text(
-                            text = "Choose Your Plan",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(top = 16.dp, bottom = 16.dp)
-                        )
-
-                        HorizontalPager(
-                            state = pagerState,
-                            contentPadding = PaddingValues(horizontal = 32.dp),
-                            pageSpacing = 16.dp,
-                            modifier = Modifier.fillMaxWidth()
-                        ) { page ->
-                            PlanCard(plan = plans[page])
-                        }
+        )
+    } else {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            when {
+                isLoading -> {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                }
+                error != null -> {
+                    Text(
+                        text = error ?: "Unknown error",
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+                else -> {
+                    if (plans.isNotEmpty()) {
+                        val pagerState = rememberPagerState(pageCount = { plans.size })
                         
-                        Spacer(modifier = Modifier.height(24.dp))
-                        
-                        // Page Indicator
-                        Row(
-                            Modifier
-                                .height(50.dp)
-                                .fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Top
                         ) {
-                            repeat(plans.size) { iteration ->
-                                val color = if (pagerState.currentPage == iteration) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-                                Box(
-                                    modifier = Modifier
-                                        .padding(4.dp)
-                                        .clip(RoundedCornerShape(50)) // Clip to circle
-                                        .background(color)
-                                        .size(10.dp)
+                            Text(
+                                text = "Choose Your Plan",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = 16.dp, bottom = 16.dp)
+                            )
+
+                            HorizontalPager(
+                                state = pagerState,
+                                contentPadding = PaddingValues(horizontal = 32.dp),
+                                pageSpacing = 16.dp,
+                                modifier = Modifier.fillMaxWidth()
+                            ) { page ->
+                                PlanCard(
+                                    plan = plans[page],
+                                    onSelect = { selectedPlan = plans[page] }
                                 )
                             }
+                            
+                            Spacer(modifier = Modifier.height(24.dp))
+                            
+                            // Page Indicator
+                            Row(
+                                Modifier
+                                    .height(50.dp)
+                                    .fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                repeat(plans.size) { iteration ->
+                                    val color = if (pagerState.currentPage == iteration) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(4.dp)
+                                            .clip(RoundedCornerShape(50)) // Clip to circle
+                                            .background(color)
+                                            .size(10.dp)
+                                    )
+                                }
+                            }
                         }
-                    }
-                } else {
-                     Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("No plans available")
+                    } else {
+                         Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("No plans available")
+                        }
                     }
                 }
             }
@@ -148,7 +173,7 @@ fun SubscriptionHistoryItem(subscription: Subscription) {
 }
 
 @Composable
-fun PlanCard(plan: Plan) {
+fun PlanCard(plan: Plan, onSelect: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -225,7 +250,7 @@ fun PlanCard(plan: Plan) {
                 }
 
                 Button(
-                    onClick = { /* Handle purchase */ },
+                    onClick = onSelect,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp),

@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Send
@@ -42,11 +43,19 @@ fun UserListScreen(
     val loginState by viewModel.loginState.collectAsState()
     val selectedUser by viewModel.selectedUser.collectAsState()
     val userProfileLoading by viewModel.userProfileLoading.collectAsState(initial = false)
+    val favourites by viewModel.favourites.collectAsState()
 
     val currentUserId = (loginState as? LoginState.Success)?.user?.id
     val filteredUsers = users.filter { it.id != currentUserId }
 
     val pagerState = rememberPagerState(pageCount = { filteredUsers.size })
+
+    // Fetch favourites when screen loads or user logs in
+    LaunchedEffect(currentUserId) {
+        if (currentUserId != null) {
+            viewModel.fetchFavourites(currentUserId)
+        }
+    }
 
     // Observe selectedUser to trigger navigation
     LaunchedEffect(selectedUser) {
@@ -73,20 +82,30 @@ fun UserListScreen(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize()
             ) { page ->
+                val targetUser = filteredUsers[page]
+                val isFavourite = favourites.any { it.favouritedUser.id == targetUser.id }
+
                 FullPageUserItem(
-                    user = filteredUsers[page],
+                    user = targetUser,
+                    isFavourite = isFavourite,
                     currentUserId = currentUserId ?: 0,
                     viewModel = viewModel,
                     onAction = { action ->
                         when (action) {
-                            "Chat" -> onChatClick(filteredUsers[page])
-                            "Wishlist" -> viewModel.addFavourite(currentUserId ?: 0, filteredUsers[page].id)
+                            "Chat" -> onChatClick(targetUser)
+                            "Wishlist" -> {
+                                if (isFavourite) {
+                                    viewModel.removeFavourite(currentUserId ?: 0, targetUser.id)
+                                } else {
+                                    viewModel.addFavourite(currentUserId ?: 0, targetUser.id)
+                                }
+                            }
                             // Removed Interest and Shortlist as requested
                         }
                     },
                     onClick = {
                         // On user card click, fetch user profile
-                        viewModel.fetchUserById(filteredUsers[page].id)
+                        viewModel.fetchUserById(targetUser.id)
                     }
                 )
             }
@@ -97,6 +116,7 @@ fun UserListScreen(
 @Composable
 fun FullPageUserItem(
     user: User,
+    isFavourite: Boolean,
     currentUserId: Int,
     viewModel: LoginViewModel,
     onAction: (String) -> Unit,
@@ -171,7 +191,6 @@ fun FullPageUserItem(
             Text(
                 text = "${user.religion ?: ""} • ${user.caste ?: ""}",
                 style = MaterialTheme.typography.bodyMedium,
-
                 color = Color.White.copy(alpha = 0.8f)
             )
              Spacer(modifier = Modifier.height(4.dp))
@@ -192,7 +211,7 @@ fun FullPageUserItem(
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 ActionButton(
-                    icon = Icons.Filled.FavoriteBorder,
+                    icon = if (isFavourite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                     label = "Wishlist",
                     onClick = { onAction("Wishlist") }
                 )

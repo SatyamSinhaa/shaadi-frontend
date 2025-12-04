@@ -6,9 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.myapplication"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.myapplication"
@@ -64,4 +62,32 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+// Task to copy Debug APKs
+tasks.register<Copy>("copyDebugApk") {
+    description = "Copies generated Debug APKs to the root generated-apks/debug directory"
+    from(layout.buildDirectory.dir("outputs/apk/debug"))
+    into(rootProject.layout.projectDirectory.dir("generated-apks/debug"))
+    include("*.apk")
+    dependsOn("packageDebug")
+}
+
+// Task to copy Release APKs
+tasks.register<Copy>("copyReleaseApk") {
+    description = "Copies generated Release APKs to the root generated-apks/release directory"
+    from(layout.buildDirectory.dir("outputs/apk/release"))
+    into(rootProject.layout.projectDirectory.dir("generated-apks/release"))
+    include("*.apk")
+    dependsOn("packageRelease")
+}
+
+// Automatically run the copy tasks after assemble
+afterEvaluate {
+    tasks.named("assembleDebug") {
+        finalizedBy("copyDebugApk")
+    }
+    tasks.named("assembleRelease") {
+        finalizedBy("copyReleaseApk")
+    }
 }

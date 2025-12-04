@@ -25,6 +25,9 @@ class PlansViewModel : ViewModel() {
     private val _historyLoading = MutableStateFlow(false)
     val historyLoading: StateFlow<Boolean> = _historyLoading
 
+    private val _purchaseState = MutableStateFlow<String?>(null)
+    val purchaseState: StateFlow<String?> = _purchaseState
+
     init {
         fetchPlans()
     }
@@ -66,6 +69,30 @@ class PlansViewModel : ViewModel() {
                 _historyLoading.value = false
             }
         }
+    }
+
+    fun purchaseSubscription(userId: Int, planId: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _purchaseState.value = null
+            try {
+                val body = mapOf("planId" to planId)
+                val response = RetrofitClient.apiService.purchaseSubscription(userId, body)
+                if (response.isSuccessful) {
+                    _purchaseState.value = "Success"
+                } else {
+                    _purchaseState.value = "Failed: ${response.message()}"
+                }
+            } catch (e: Exception) {
+                _purchaseState.value = "Error: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun resetPurchaseState() {
+        _purchaseState.value = null
     }
     
     fun clearHistory() {
