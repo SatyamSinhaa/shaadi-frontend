@@ -74,7 +74,10 @@ fun MessageDetailScreen(modifier: Modifier = Modifier, receiver: User, onBack: (
     }
 
     Scaffold(
-        modifier = modifier.imePadding(), // Added imePadding to modifier
+        // Fix for double padding (NavBar + IME)
+        modifier = modifier.windowInsetsPadding(
+            WindowInsets.ime.exclude(WindowInsets.navigationBars)
+        ),
         topBar = {
             TopAppBar(
                 title = {

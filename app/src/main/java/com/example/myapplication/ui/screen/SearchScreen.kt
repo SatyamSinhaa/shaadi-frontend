@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,9 +77,9 @@ fun SearchScreen(
         val minAgeInt = minAge.toIntOrNull()
         val maxAgeInt = maxAge.toIntOrNull()
         val currentUserGender = (loginState as? LoginState.Success)?.user?.gender
-        val oppositeGender = when (currentUserGender) {
-            "male" -> "Male"
-            "female" -> "Female"
+        val oppositeGender = when (currentUserGender?.lowercase()) {
+            "male" -> "Female"
+            "female" -> "Male"
             else -> null
         }
         viewModel.searchUsers(
@@ -112,24 +113,22 @@ fun SearchScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Search Users",
-                    style = MaterialTheme.typography.headlineMedium
+                // Replaced "Search Users" Heading with Search Input Field
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    placeholder = { Text("Search by Name or Surname") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search") }
                 )
+                
+                Spacer(modifier = Modifier.width(8.dp))
+                
                 IconButton(onClick = { showFilterDrawer = true }) {
                     Icon(Icons.Filled.FilterList, contentDescription = "Filters")
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Name input
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                placeholder = { Text("Name or Surname") },
-                modifier = Modifier.fillMaxWidth()
-            )
 
             Spacer(modifier = Modifier.height(16.dp))
 

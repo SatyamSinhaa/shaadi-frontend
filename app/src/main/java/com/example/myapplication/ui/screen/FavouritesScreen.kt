@@ -1,9 +1,11 @@
 package com.example.myapplication.ui.screen
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -11,8 +13,11 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.example.myapplication.data.model.Favourite
 import com.example.myapplication.ui.viewmodel.LoginState
 import com.example.myapplication.ui.viewmodel.LoginViewModel
@@ -66,29 +71,57 @@ fun FavouriteItem(
 ) {
     val loginState by viewModel.loginState.collectAsState()
     val currentUser = (loginState as? LoginState.Success)?.user
+    val user = favourite.favouritedUser
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp)
-            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp)
+            .clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.Top
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = "User: ${favourite.favouritedUser.name}", style = MaterialTheme.typography.bodyLarge)
-                Text(text = "Email: ${favourite.favouritedUser.email}", style = MaterialTheme.typography.bodyMedium)
-                favourite.favouritedUser.age?.let { Text(text = "Age: $it", style = MaterialTheme.typography.bodyMedium) }
-                favourite.favouritedUser.gender?.let { Text(text = "Gender: $it", style = MaterialTheme.typography.bodyMedium) }
-                favourite.favouritedUser.religion?.let { Text(text = "Religion: $it", style = MaterialTheme.typography.bodyMedium) }
-                favourite.favouritedUser.cityTown?.let { Text(text = "City/Town: $it", style = MaterialTheme.typography.bodyMedium) }
-                favourite.favouritedUser.district?.let { Text(text = "District: $it", style = MaterialTheme.typography.bodyMedium) }
-                favourite.favouritedUser.state?.let { Text(text = "State: $it", style = MaterialTheme.typography.bodyMedium) }
+            // Circular Photo
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                if (user.photoUrl != null) {
+                    AsyncImage(
+                        model = user.photoUrl,
+                        contentDescription = "Profile Photo",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Text(
+                        text = user.name.firstOrNull()?.toString() ?: "?",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // Name
+            Text(
+                text = user.name,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f)
+            )
+
+            // Delete Button
             IconButton(onClick = {
-                currentUser?.let { viewModel.removeFavourite(it.id, favourite.favouritedUser.id) }
+                currentUser?.let { viewModel.removeFavourite(it.id, user.id) }
             }) {
                 Icon(Icons.Filled.Delete, contentDescription = "Remove from favourites")
             }

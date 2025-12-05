@@ -8,11 +8,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -28,7 +33,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import java.time.format.DateTimeFormatter
 
 enum class EditSection {
-    NONE, BASIC_INFO, PERSONAL_DETAILS, LOCATION, ABOUT_ME
+    NONE, BASIC_INFO, PERSONAL_DETAILS, LOCATION, ABOUT_ME, HEADER
 }
 
 @Composable
@@ -78,151 +83,209 @@ fun ProfileView(
     onEditSection: (EditSection) -> Unit,
     onLogout: () -> Unit
 ) {
+    // State for tab selection
+    var selectedTabIndex by remember { mutableStateOf(0) }
+    val tabs = listOf("Details", "Photos", "Videos") // Updated tabs to look more like Instagram placeholders
+    val tabIcons = listOf(Icons.Filled.Info, Icons.Filled.GridOn, Icons.Filled.Person) // Placeholder icons
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 16.dp) // Removed top padding
             .windowInsetsPadding(WindowInsets.systemBars),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Profile Header
+        // Profile Header (Fixed at top)
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
             content = {
-                Column(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // Profile Photo
-                    Box(
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Row(
                         modifier = Modifier
-                            .size(120.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (user.photoUrl != null) {
-                            AsyncImage(
-                                model = user.photoUrl,
-                                contentDescription = "Profile Photo",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
+                        // Profile Photo
+                        Box(
+                            modifier = Modifier
+                                .size(100.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (user.photoUrl != null) {
+                                AsyncImage(
+                                    model = user.photoUrl,
+                                    contentDescription = "Profile Photo",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Text(
+                                    text = user.name.firstOrNull()?.toString() ?: "?",
+                                    style = MaterialTheme.typography.headlineLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.width(24.dp))
+                        
+                        Column(
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.Start
+                        ) {
                             Text(
-                                text = user.name.firstOrNull()?.toString() ?: "?",
-                                style = MaterialTheme.typography.headlineLarge,
+                                text = user.name,
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = user.email,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = user.name,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = user.email,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+
+                    IconButton(
+                        onClick = { onEditSection(EditSection.HEADER) },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Edit,
+                            contentDescription = "Edit Name and Photo",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Bio Section
-        ProfileSection(
-            title = "About Me",
-            onEdit = { onEditSection(EditSection.ABOUT_ME) }
-        ) {
-            Text(
-                text = user.bio ?: "No bio available",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Basic Info Section
-        ProfileSection(
-            title = "Basic Information",
-            onEdit = { onEditSection(EditSection.BASIC_INFO) }
-        ) {
-            ProfileField(label = "Age", value = user.age?.toString())
-            ProfileField(label = "Gender", value = user.gender)
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Personal Details Section
-        ProfileSection(
-            title = "Personal Details",
-            onEdit = { onEditSection(EditSection.PERSONAL_DETAILS) }
-        ) {
-            ProfileField(label = "Gotr", value = user.gotr)
-            ProfileField(label = "Caste", value = user.caste)
-            ProfileField(label = "Category", value = user.category)
-            ProfileField(label = "Religion", value = user.religion)
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Location Section
-        ProfileSection(
-            title = "Location",
-            onEdit = { onEditSection(EditSection.LOCATION) }
-        ) {
-            ProfileField(label = "City/Town", value = user.cityTown)
-            ProfileField(label = "District", value = user.district)
-            ProfileField(label = "State", value = user.state)
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Subscription Section
-        if (subscription != null) {
-            ProfileSection(title = "Subscription Details") {
-                val formattedExpiry = try {
-                    val parsedDate = try {
-                        // Try parsing as LocalDateTime (ISO format) first
-                        java.time.LocalDateTime.parse(subscription.expiryDate).toLocalDate()
-                    } catch (e: Exception) {
-                        // Fallback to LocalDate
-                        java.time.LocalDate.parse(subscription.expiryDate)
-                    }
-                    DateTimeFormatter.ofPattern("dd MMM yyyy").format(parsedDate)
-                } catch (e: Exception) {
-                    subscription.expiryDate
-                }
-                ProfileField(label = "Plan Name", value = subscription.planName)
-                ProfileField(label = "Plan Duration (Months)", value = subscription.planDurationMonths.toString())
-                ProfileField(label = "Expiry Date", value = formattedExpiry)
-                ProfileField(label = "Chat Limit", value = subscription.chatLimit.toString())
-                ProfileField(label = "Plan Chat Limit", value = subscription.planChatLimit.toString())
+        // Tab Row (Instagram Style)
+        TabRow(selectedTabIndex = selectedTabIndex) {
+            tabs.forEachIndexed { index, title ->
+                Tab(
+                    selected = selectedTabIndex == index,
+                    onClick = { selectedTabIndex = index },
+                    icon = { Icon(tabIcons[index], contentDescription = title) }
+                )
             }
-            Spacer(modifier = Modifier.height(16.dp))
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Action Buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        // Content below tabs (Scrollable)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
         ) {
-            OutlinedButton(
-                onClick = onLogout,
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Filled.ExitToApp, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Logout")
+            when (selectedTabIndex) {
+                0 -> {
+                    // All Details in Tab 1
+                    
+                    // Bio Section
+                    ProfileSection(
+                        title = "About Me",
+                        onEdit = { onEditSection(EditSection.ABOUT_ME) }
+                    ) {
+                        Text(
+                            text = user.bio ?: "No bio available",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Basic Info Section
+                    ProfileSection(
+                        title = "Basic Information",
+                        onEdit = { onEditSection(EditSection.BASIC_INFO) }
+                    ) {
+                        ProfileField(label = "Age", value = user.age?.toString())
+                        ProfileField(label = "Gender", value = user.gender)
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Personal Details Section
+                    ProfileSection(
+                        title = "Personal Details",
+                        onEdit = { onEditSection(EditSection.PERSONAL_DETAILS) }
+                    ) {
+                        ProfileField(label = "Gotr", value = user.gotr)
+                        ProfileField(label = "Caste", value = user.caste)
+                        ProfileField(label = "Category", value = user.category)
+                        ProfileField(label = "Religion", value = user.religion)
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Location Section
+                    ProfileSection(
+                        title = "Location",
+                        onEdit = { onEditSection(EditSection.LOCATION) }
+                    ) {
+                        ProfileField(label = "City/Town", value = user.cityTown)
+                        ProfileField(label = "District", value = user.district)
+                        ProfileField(label = "State", value = user.state)
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Subscription Section
+                    if (subscription != null) {
+                        ProfileSection(title = "Subscription Details") {
+                            val formattedExpiry = try {
+                                val parsedDate = try {
+                                    java.time.LocalDateTime.parse(subscription.expiryDate).toLocalDate()
+                                } catch (e: Exception) {
+                                    java.time.LocalDate.parse(subscription.expiryDate)
+                                }
+                                DateTimeFormatter.ofPattern("dd MMM yyyy").format(parsedDate)
+                            } catch (e: Exception) {
+                                subscription.expiryDate
+                            }
+                            ProfileField(label = "Plan Name", value = subscription.planName)
+                            ProfileField(label = "Plan Duration (Months)", value = subscription.planDurationMonths.toString())
+                            ProfileField(label = "Expiry Date", value = formattedExpiry)
+                            ProfileField(label = "Chat Limit", value = subscription.chatLimit.toString())
+                            ProfileField(label = "Plan Chat Limit", value = subscription.planChatLimit.toString())
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Action Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onLogout,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Filled.ExitToApp, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Logout")
+                        }
+                    }
+                }
+                1 -> {
+                   // Empty Tab 2
+                   Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                       Text("Photos Tab Empty", style = MaterialTheme.typography.bodyLarge)
+                   }
+                }
+                2 -> {
+                    // Empty Tab 3
+                   Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                       Text("Videos Tab Empty", style = MaterialTheme.typography.bodyLarge)
+                   }
+                }
             }
         }
     }
@@ -291,6 +354,9 @@ fun SectionEditForm(
     onCancel: () -> Unit
 ) {
     // Local state for all fields, we'll only show relevant ones based on section
+    var name by remember { mutableStateOf(user.name) }
+    var photoUrl by remember { mutableStateOf(user.photoUrl ?: "") }
+
     var age by remember { mutableStateOf(user.age?.toString() ?: "") }
     var gender by remember { mutableStateOf(user.gender ?: "") }
     
@@ -322,6 +388,20 @@ fun SectionEditForm(
         )
 
         when (section) {
+            EditSection.HEADER -> {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = photoUrl,
+                    onValueChange = { photoUrl = it },
+                    label = { Text("Photo URL") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
             EditSection.BASIC_INFO -> {
                 OutlinedTextField(
                     value = age,
@@ -404,6 +484,10 @@ fun SectionEditForm(
                 onClick = {
                     // Create updated user based on the section being edited
                     val updatedUser = when (section) {
+                        EditSection.HEADER -> user.copy(
+                            name = name.takeIf { it.isNotBlank() } ?: user.name,
+                            photoUrl = photoUrl.takeIf { it.isNotBlank() }
+                        )
                         EditSection.BASIC_INFO -> user.copy(
                             age = age.toIntOrNull(),
                             gender = gender.takeIf { it.isNotBlank() }

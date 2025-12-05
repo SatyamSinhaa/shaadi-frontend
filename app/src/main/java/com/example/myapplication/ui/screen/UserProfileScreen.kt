@@ -7,6 +7,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,13 +18,36 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.myapplication.data.model.User
+import com.example.myapplication.ui.viewmodel.LoginState
+import com.example.myapplication.ui.viewmodel.LoginViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UserProfileScreen(modifier: Modifier = Modifier, user: User?, onBack: () -> Unit) {
+fun UserProfileScreen(
+    modifier: Modifier = Modifier,
+    user: User?,
+    onBack: () -> Unit,
+    viewModel: LoginViewModel = viewModel(),
+    onChatClick: (User) -> Unit = {}
+) {
     if (user == null) return
+
+    val loginState by viewModel.loginState.collectAsState()
+    val currentUserId = (loginState as? LoginState.Success)?.user?.id
+    val favourites by viewModel.favourites.collectAsState()
+
+    // Check if this user is in favourites
+    val isFavourite = favourites.any { it.favouritedUser.id == user.id }
+
+    // Fetch favourites when screen loads to ensure state is up to date
+    LaunchedEffect(currentUserId) {
+        if (currentUserId != null) {
+            viewModel.fetchFavourites(currentUserId)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -43,14 +69,16 @@ fun UserProfileScreen(modifier: Modifier = Modifier, user: User?, onBack: () -> 
                 .padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Profile Header (Photo, Name, Email)
+            // Profile Header (Photo, Name, Email, Actions)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
                 content = {
-                    Column(
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Row(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Profile Photo
                         Box(
@@ -75,17 +103,67 @@ fun UserProfileScreen(modifier: Modifier = Modifier, user: User?, onBack: () -> 
                                 )
                             }
                         }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = user.name,
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = user.email,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        
+                        Spacer(modifier = Modifier.width(24.dp))
+                        
+                        Column(
+                            verticalArrangement = Arrangement.SpaceBetween,
+                            horizontalAlignment = Alignment.Start,
+                            modifier = Modifier.height(120.dp)
+                        ) {
+                            Column {
+                                Text(
+                                    text = user.name,
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = user.email,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            
+                            // Action Buttons (Wishlist, Message)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        if (currentUserId != null) {
+                                            if (isFavourite) {
+                                                viewModel.removeFavourite(currentUserId, user.id)
+                                            } else {
+                                                viewModel.addFavourite(currentUserId, user.id)
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isFavourite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                                        contentDescription = "Wishlist",
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                                
+                                IconButton(
+                                    onClick = { onChatClick(user) },
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.ChatBubbleOutline,
+                                        contentDescription = "Message",
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             )
