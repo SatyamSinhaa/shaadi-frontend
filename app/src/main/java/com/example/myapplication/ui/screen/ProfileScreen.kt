@@ -12,11 +12,14 @@ import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -85,13 +88,12 @@ fun ProfileView(
 ) {
     // State for tab selection
     var selectedTabIndex by remember { mutableStateOf(0) }
-    val tabs = listOf("Details", "Photos", "Videos") // Updated tabs to look more like Instagram placeholders
-    val tabIcons = listOf(Icons.Filled.Info, Icons.Filled.GridOn, Icons.Filled.Person) // Placeholder icons
+    val tabs = listOf("Details", "Photos", "Videos")
+    val tabIcons = listOf(Icons.Filled.Info, Icons.Filled.GridOn, Icons.Filled.PlayArrow)
 
     Column(
         modifier = modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.systemBars),
+            .fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Profile Header (Fixed at top)
@@ -169,7 +171,11 @@ fun ProfileView(
         )
 
         // Tab Row (Instagram Style)
-        TabRow(selectedTabIndex = selectedTabIndex) {
+        TabRow(
+            selectedTabIndex = selectedTabIndex,
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.primary
+        ) {
             tabs.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTabIndex == index,
@@ -188,12 +194,14 @@ fun ProfileView(
         ) {
             when (selectedTabIndex) {
                 0 -> {
-                    // All Details in Tab 1
+                    // --- All Details in Tab 1 ---
                     
                     // Bio Section
+                    val isBioMissing = user.bio.isNullOrBlank()
                     ProfileSection(
                         title = "About Me",
-                        onEdit = { onEditSection(EditSection.ABOUT_ME) }
+                        onEdit = { onEditSection(EditSection.ABOUT_ME) },
+                        hasWarning = isBioMissing
                     ) {
                         Text(
                             text = user.bio ?: "No bio available",
@@ -204,9 +212,11 @@ fun ProfileView(
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     // Basic Info Section
+                    val isBasicInfoMissing = user.age == null || user.gender.isNullOrBlank()
                     ProfileSection(
                         title = "Basic Information",
-                        onEdit = { onEditSection(EditSection.BASIC_INFO) }
+                        onEdit = { onEditSection(EditSection.BASIC_INFO) },
+                        hasWarning = isBasicInfoMissing
                     ) {
                         ProfileField(label = "Age", value = user.age?.toString())
                         ProfileField(label = "Gender", value = user.gender)
@@ -214,9 +224,11 @@ fun ProfileView(
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     // Personal Details Section
+                    val isPersonalDetailsMissing = user.gotr.isNullOrBlank() || user.caste.isNullOrBlank() || user.category.isNullOrBlank() || user.religion.isNullOrBlank()
                     ProfileSection(
                         title = "Personal Details",
-                        onEdit = { onEditSection(EditSection.PERSONAL_DETAILS) }
+                        onEdit = { onEditSection(EditSection.PERSONAL_DETAILS) },
+                        hasWarning = isPersonalDetailsMissing
                     ) {
                         ProfileField(label = "Gotr", value = user.gotr)
                         ProfileField(label = "Caste", value = user.caste)
@@ -226,9 +238,11 @@ fun ProfileView(
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     // Location Section
+                    val isLocationMissing = user.cityTown.isNullOrBlank() || user.district.isNullOrBlank() || user.state.isNullOrBlank()
                     ProfileSection(
                         title = "Location",
-                        onEdit = { onEditSection(EditSection.LOCATION) }
+                        onEdit = { onEditSection(EditSection.LOCATION) },
+                        hasWarning = isLocationMissing
                     ) {
                         ProfileField(label = "City/Town", value = user.cityTown)
                         ProfileField(label = "District", value = user.district)
@@ -275,15 +289,15 @@ fun ProfileView(
                     }
                 }
                 1 -> {
-                   // Empty Tab 2
-                   Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                       Text("Photos Tab Empty", style = MaterialTheme.typography.bodyLarge)
+                   // Empty Tab 2 (Photos)
+                   Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                       Text("No Photos Yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                    }
                 }
                 2 -> {
-                    // Empty Tab 3
-                   Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                       Text("Videos Tab Empty", style = MaterialTheme.typography.bodyLarge)
+                    // Empty Tab 3 (Videos)
+                   Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                       Text("No Videos Yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                    }
                 }
             }
@@ -292,7 +306,12 @@ fun ProfileView(
 }
 
 @Composable
-fun ProfileSection(title: String, onEdit: (() -> Unit)? = null, content: @Composable () -> Unit) {
+fun ProfileSection(
+    title: String, 
+    onEdit: (() -> Unit)? = null, 
+    hasWarning: Boolean = false,
+    content: @Composable () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -309,12 +328,25 @@ fun ProfileSection(title: String, onEdit: (() -> Unit)? = null, content: @Compos
                         fontWeight = FontWeight.SemiBold
                     )
                     if (onEdit != null) {
-                        IconButton(onClick = onEdit, modifier = Modifier.size(24.dp)) {
-                            Icon(
-                                imageVector = Icons.Filled.Edit,
-                                contentDescription = "Edit $title",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                        Box {
+                            IconButton(onClick = onEdit, modifier = Modifier.size(24.dp)) {
+                                Icon(
+                                    imageVector = Icons.Filled.Edit,
+                                    contentDescription = "Edit $title",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            if (hasWarning) {
+                                Icon(
+                                    imageVector = Icons.Filled.Warning,
+                                    contentDescription = "Missing Information",
+                                    tint = Color.Red,
+                                    modifier = Modifier
+                                        .size(12.dp)
+                                        .align(Alignment.TopEnd)
+                                        .offset(x = 4.dp, y = (-4).dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -375,9 +407,7 @@ fun SectionEditForm(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .statusBarsPadding()
-            .padding(16.dp)
-            .windowInsetsPadding(WindowInsets.systemBars),
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(

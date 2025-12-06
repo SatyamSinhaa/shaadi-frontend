@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -61,75 +63,23 @@ fun AppNavigation(
     var showRegister by remember { mutableStateOf(false) }
     var registrationSuccessMessage by remember { mutableStateOf<String?>(null) }
     var registeredUser by remember { mutableStateOf<User?>(null) }
-    var showPersonalDetails by remember { mutableStateOf(false) }
-    var showLocationDetails by remember { mutableStateOf(false) }
     var refreshMessages by remember { mutableStateOf(false) }
     var showPlans by remember { mutableStateOf(false) }
     var showChatDetail by remember { mutableStateOf<User?>(null) }
     var showHistory by remember { mutableStateOf(false) }
+    var showSearch by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     // State to control bottom bar visibility
     var isChatDetailVisible by remember { mutableStateOf(false) }
 
-    // Handle registration flow screens
-    if (showPersonalDetails && registeredUser != null) {
-        BackHandler { showPersonalDetails = false }
-        Scaffold(
-            modifier = modifier,
-            topBar = {
-                TopAppBar(
-                    title = { Text("Personal Details") },
-                    actions = {
-                        IconButton(onClick = {
-                            loginViewModel.fetchFavourites(registeredUser!!.id)
-                            showFavourites = true
-                        }) {
-                            Icon(Icons.Filled.Favorite, contentDescription = "Favourites")
-                        }
-                        IconButton(onClick = { /* Menu action */ }) {
-                            Icon(Icons.Filled.Menu, contentDescription = "Menu")
-                        }
-                    }
-                )
-            }
-        ) { innerPadding ->
-            PersonalDetailsScreen(
-                modifier = Modifier.padding(innerPadding),
-                user = registeredUser!!,
-                onNext = { updatedUser ->
-                    registeredUser = updatedUser
-                    showPersonalDetails = false
-                    showLocationDetails = true
-                }
-            )
-        }
-        return
-    }
-
-    if (showLocationDetails && registeredUser != null) {
-        BackHandler { showLocationDetails = false }
-        LocationDetailsScreen(
-            modifier = modifier,
-            user = registeredUser!!,
-            onComplete = { updatedUser ->
-                registeredUser = updatedUser
-                showLocationDetails = false
-                loginViewModel.updateUser(updatedUser)
-                loginViewModel.fetchAllUsers()
-            }
-        )
-        return
-    }
-
     // Navigation Item Definitions
-    // 0: Home, 1: Matches, 2: Search, 3: Messages, 4: Profile
+    // 0: Home, 1: Matches, 2: Messages, 3: Profile
     val navItems = listOf(
         Triple("Home", Icons.Filled.Home, 0),
         Triple("Matches", Icons.Filled.ThumbUp, 1),
-        Triple("Search", Icons.Filled.Search, 2),
-        Triple("Messages", Icons.Filled.Email, 3),
-        Triple("Profile", null, 4) // Profile uses custom icon logic
+        Triple("Messages", Icons.Filled.Email, 2),
+        Triple("Profile", null, 3) // Profile uses custom icon logic
     )
 
     when (loginState) {
@@ -149,26 +99,55 @@ fun AppNavigation(
                     .count()
             }
 
+            // Check for missing profile fields
+            val hasMissingFields = remember(currentUser) {
+                currentUser.bio.isNullOrBlank() ||
+                currentUser.age == null ||
+                currentUser.gender.isNullOrBlank() ||
+                currentUser.gotr.isNullOrBlank() ||
+                currentUser.caste.isNullOrBlank() ||
+                currentUser.category.isNullOrBlank() ||
+                currentUser.religion.isNullOrBlank() ||
+                currentUser.cityTown.isNullOrBlank() ||
+                currentUser.district.isNullOrBlank() ||
+                currentUser.state.isNullOrBlank()
+            }
+
             val profileIcon: @Composable () -> Unit = {
-                if (currentUser.photoUrl != null) {
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .then(
-                                if (selectedTab == 4) Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                                else Modifier
+                Box {
+                    if (currentUser.photoUrl != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .then(
+                                    if (selectedTab == 3) Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                                    else Modifier
+                                )
+                        ) {
+                            AsyncImage(
+                                model = currentUser.photoUrl,
+                                contentDescription = "Profile",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
                             )
-                    ) {
-                        AsyncImage(
-                            model = currentUser.photoUrl,
-                            contentDescription = "Profile",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
+                        }
+                    } else {
+                        Icon(Icons.Filled.Person, contentDescription = "Profile")
+                    }
+
+                    // Warning badge for missing fields
+                    if (hasMissingFields) {
+                        Icon(
+                            imageVector = Icons.Filled.Warning,
+                            contentDescription = "Incomplete Profile",
+                            tint = Color.Red, // Or MaterialTheme.colorScheme.error
+                            modifier = Modifier
+                                .size(12.dp)
+                                .align(Alignment.TopEnd)
+                                .background(MaterialTheme.colorScheme.surface, CircleShape)
                         )
                     }
-                } else {
-                    Icon(Icons.Filled.Person, contentDescription = "Profile")
                 }
             }
 
@@ -183,13 +162,14 @@ fun AppNavigation(
                                 showFavourites = false
                                 showMessages = false
                                 showPlans = false
+                                showSearch = false
                                 loginViewModel.selectUser(null)
-                                if (index == 3) refreshMessages = !refreshMessages
+                                if (index == 2) refreshMessages = !refreshMessages
                             },
                             icon = {
-                                if (index == 4) {
+                                if (index == 3) {
                                     profileIcon()
-                                } else if (index == 3) {
+                                } else if (index == 2) {
                                     // Messages with Badge
                                     if (unreadConversationCount > 0) {
                                         BadgedBox(
@@ -274,6 +254,18 @@ fun AppNavigation(
                 ) { padding ->
                     FavouritesScreen(modifier = Modifier.padding(padding), onBack = { showFavourites = false })
                 }
+            } else if (showSearch) {
+                BackHandler { showSearch = false }
+                Scaffold(
+                    bottomBar = bottomBarContent
+                ) { padding ->
+                    SearchScreen(
+                        modifier = Modifier.padding(padding),
+                        onUserProfileClick = { user ->
+                            loginViewModel.fetchUserById(user.id)
+                        }
+                    )
+                }
             } else {
                 Scaffold(
                     modifier = modifier,
@@ -283,12 +275,17 @@ fun AppNavigation(
                                 title = { Text("Shaadi App") },
                                 actions = {
                                     IconButton(onClick = {
+                                        showSearch = true
+                                    }) {
+                                        Icon(Icons.Filled.Search, contentDescription = "Search")
+                                    }
+                                    IconButton(onClick = {
                                         loginViewModel.fetchFavourites(currentUser.id)
                                         showFavourites = true
                                     }) {
                                         Icon(Icons.Filled.Favorite, contentDescription = "Favourites")
                                     }
-                                    if (selectedTab == 4) {
+                                    if (selectedTab == 3) {
                                         IconButton(onClick = { /* Menu action */ }) {
                                             Icon(Icons.Filled.Menu, contentDescription = "Options")
                                         }
@@ -304,7 +301,14 @@ fun AppNavigation(
                     }
                 ) { padding ->
                     when (selectedTab) {
-                        0 -> UserListScreen(
+                        0 -> HomeScreen(
+                            modifier = Modifier.padding(padding),
+                            viewModel = loginViewModel,
+                            onUserClick = { user ->
+                                loginViewModel.fetchUserById(user.id)
+                            }
+                        )
+                        1 -> UserListScreen(
                             modifier = Modifier.padding(padding),
                             viewModel = loginViewModel,
                             onChatClick = { user ->
@@ -314,33 +318,32 @@ fun AppNavigation(
                                 loginViewModel.fetchUserById(user.id)
                             }
                         )
-                        1 -> MatchesScreen(modifier = Modifier.padding(padding))
-                        2 -> SearchScreen(
-                            modifier = Modifier.padding(padding),
-                            onUserProfileClick = { user ->
-                                loginViewModel.fetchUserById(user.id)
-                            }
-                        )
-                        3 -> MessagesScreen(
+                        // Search (2) removed, Messages becomes 2
+                        2 -> MessagesScreen(
                             modifier = Modifier.padding(padding),
                             viewModel = loginViewModel,
                             refreshTrigger = refreshMessages,
                             onChatStatusChanged = { isVisible -> isChatDetailVisible = isVisible }
                         )
-                        4 -> ProfileScreen(modifier = Modifier.padding(padding), viewModel = loginViewModel)
+                        3 -> ProfileScreen(modifier = Modifier.padding(padding), viewModel = loginViewModel)
                     }
                 }
             }
         }
         else -> {
             if (showRegister) {
+                // Updated RegisterScreen takes over the full registration flow
                 RegisterScreen(modifier = modifier, onBackToLogin = {
                     registrationSuccessMessage = it
                     showRegister = false
                 }, onRegisterSuccess = { user ->
                     registeredUser = user
                     showRegister = false
-                    showPersonalDetails = true
+                    // After full registration success, we can treat it as login or whatever the flow requires
+                    // Currently RegisterScreen handles the steps internally.
+                    // If we need to login automatically, we can do it here or just show success.
+                    // Assuming user needs to login:
+                    registrationSuccessMessage = "Registration complete. Please Login."
                 })
             } else {
                 LoginScreen(
