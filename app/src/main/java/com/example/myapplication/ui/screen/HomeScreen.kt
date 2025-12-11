@@ -1,6 +1,7 @@
 package com.example.myapplication.ui.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -13,7 +14,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -29,6 +34,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.myapplication.data.model.User
 import com.example.myapplication.ui.viewmodel.LoginViewModel
+import com.example.myapplication.ui.viewmodel.LoginState
 
 @Composable
 fun HomeScreen(
@@ -37,9 +43,21 @@ fun HomeScreen(
     onUserClick: (User) -> Unit = {}
 ) {
     val users by viewModel.users.collectAsState()
+    val loginState by viewModel.loginState.collectAsState()
     
-    // Filter users if needed, or just show all. Assuming all users are "Matches"
-    val nearbyMatches = users 
+    // Filter users based on logged-in user's district
+    val nearbyMatches = remember(users, loginState) {
+        val currentUser = (loginState as? LoginState.Success)?.user
+        if (currentUser?.district != null) {
+            users.filter { 
+                it.district.equals(currentUser.district, ignoreCase = true) && 
+                it.id != currentUser.id // Exclude current user from matches
+            }
+        } else {
+            // Fallback: Show all users if district is missing, or empty list? 
+             users.filter { it.id != currentUser?.id }
+        }
+    }
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
@@ -78,47 +96,15 @@ fun HomeScreen(
             }
         }
         
-        // Premium Matches Header
-        item(span = { GridItemSpan(2) }) {
-             Column {
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    text = "Premium Matches (0)",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-             }
-        }
-
-        // Premium Matches Empty State
-        item(span = { GridItemSpan(2) }) {
-             Column(
-                 modifier = Modifier
-                     .fillMaxWidth()
-                     .padding(vertical = 24.dp),
-                 horizontalAlignment = Alignment.CenterHorizontally
-             ) {
-                 Icon(
-                     imageVector = Icons.Filled.Menu, // Using Menu as Crown placeholder if Crown not available
-                     contentDescription = "Premium",
-                     modifier = Modifier.size(64.dp).padding(bottom = 8.dp),
-                     tint = Color.LightGray
-                 )
-                 Text(
-                     text = "No Premium Profiles Available",
-                     color = Color.LightGray,
-                     style = MaterialTheme.typography.bodyMedium
-                 )
-             }
-        }
-
         // Nearby Matches Header
         item(span = { GridItemSpan(2) }) {
              Column {
                 Spacer(modifier = Modifier.height(16.dp))
+                val currentUser = (loginState as? LoginState.Success)?.user
+                val locationText = if (currentUser?.district != null) " in ${currentUser.district}" else ""
+                
                 Text(
-                    text = "Nearby Matches (${nearbyMatches.size})",
+                    text = "Nearby Matches$locationText (${nearbyMatches.size})",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -128,15 +114,58 @@ fun HomeScreen(
 
         // Nearby Matches Slider
         item(span = { GridItemSpan(2) }) {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
+            if (nearbyMatches.isEmpty()) {
+                Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+                    Text("No matches found in your district yet.")
+                }
+            } else {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(nearbyMatches) { user ->
+                        MatchCard(
+                            user = user, 
+                            onClick = { onUserClick(user) },
+                            modifier = Modifier.width(200.dp).height(280.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Social Media Buttons Section
+        item(span = { GridItemSpan(2) }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                items(nearbyMatches) { user ->
-                    MatchCard(
-                        user = user, 
-                        onClick = { onUserClick(user) },
-                        modifier = Modifier.width(200.dp).height(280.dp)
+                Text(
+                    text = "Follow Us",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SocialMediaButton(
+                        name = "Facebook",
+                        color = Color(0xFF1877F2),
+                        icon = Icons.Default.Share // Using generic icons as placeholders
+                    )
+                    SocialMediaButton(
+                        name = "Instagram",
+                        color = Color(0xFFE4405F),
+                        icon = Icons.Default.ThumbUp
+                    )
+                    SocialMediaButton(
+                        name = "YouTube",
+                        color = Color(0xFFFF0000),
+                        icon = Icons.Default.PlayArrow
                     )
                 }
             }
@@ -146,6 +175,40 @@ fun HomeScreen(
         item(span = { GridItemSpan(2) }) {
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+}
+
+@Composable
+fun SocialMediaButton(
+    name: String,
+    color: Color,
+    icon: ImageVector,
+    onClick: () -> Unit = {}
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(color),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = name,
+                tint = Color.White,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = name,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 

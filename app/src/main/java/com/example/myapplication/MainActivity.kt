@@ -56,6 +56,7 @@ fun AppNavigation(
 ) {
     val loginState by loginViewModel.loginState.collectAsState()
     val messages by loginViewModel.messages.collectAsState()
+    val unreadNotificationCount by loginViewModel.unreadNotificationCount.collectAsState()
     val selectedUser by loginViewModel.selectedUser.collectAsState<User?>()
     var selectedTab by remember { mutableIntStateOf(0) }
     var showFavourites by remember { mutableStateOf(false) }
@@ -68,6 +69,7 @@ fun AppNavigation(
     var showChatDetail by remember { mutableStateOf<User?>(null) }
     var showHistory by remember { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(false) }
+    var showNotifications by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     // State to control bottom bar visibility
@@ -87,9 +89,10 @@ fun AppNavigation(
             val currentUser = (loginState as LoginState.Success).user
             val selectedUserValue = selectedUser
 
-            // Fetch messages to keep badge count updated
+            // Fetch messages and notifications to keep badge counts updated
             LaunchedEffect(currentUser.id) {
                 loginViewModel.fetchMessages(currentUser.id)
+                loginViewModel.fetchUnreadNotificationCount(currentUser.id)
             }
 
             val unreadConversationCount = remember(messages, currentUser.id) {
@@ -163,6 +166,7 @@ fun AppNavigation(
                                 showMessages = false
                                 showPlans = false
                                 showSearch = false
+                                showNotifications = false
                                 loginViewModel.selectUser(null)
                                 if (index == 2) refreshMessages = !refreshMessages
                             },
@@ -217,7 +221,8 @@ fun AppNavigation(
                     modifier = modifier,
                     user = selectedUserValue,
                     onBack = { loginViewModel.selectUser(null) },
-                    onChatClick = { user -> showChatDetail = user }
+                    onChatClick = { user -> showChatDetail = user },
+                    onAcceptRequest = {} // Removed: showChatDetail = user, now it just updates state in VM, and user needs to click Chat
                 )
             } else if (showHistory) {
                 BackHandler { showHistory = false }
@@ -266,6 +271,13 @@ fun AppNavigation(
                         }
                     )
                 }
+            } else if (showNotifications) {
+                BackHandler { showNotifications = false }
+                NotificationsScreen(
+                    modifier = modifier,
+                    onBack = { showNotifications = false },
+                    viewModel = loginViewModel
+                )
             } else {
                 Scaffold(
                     modifier = modifier,
@@ -284,6 +296,23 @@ fun AppNavigation(
                                         showFavourites = true
                                     }) {
                                         Icon(Icons.Filled.Favorite, contentDescription = "Favourites")
+                                    }
+                                    IconButton(onClick = {
+                                        showNotifications = true
+                                    }) {
+                                        if (unreadNotificationCount > 0) {
+                                            BadgedBox(
+                                                badge = {
+                                                    Badge {
+                                                        Text(unreadNotificationCount.toString())
+                                                    }
+                                                }
+                                            ) {
+                                                Icon(Icons.Filled.Notifications, contentDescription = "Notifications")
+                                            }
+                                        } else {
+                                            Icon(Icons.Filled.Notifications, contentDescription = "Notifications")
+                                        }
                                     }
                                     if (selectedTab == 3) {
                                         IconButton(onClick = { /* Menu action */ }) {

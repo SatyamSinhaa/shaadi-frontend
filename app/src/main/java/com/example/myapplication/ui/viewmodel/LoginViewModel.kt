@@ -2,12 +2,13 @@ package com.example.myapplication.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.myapplication.data.api.ApiService
 import com.example.myapplication.data.api.RetrofitClient
+import com.example.myapplication.data.model.ChatRequest
 import com.example.myapplication.data.model.ErrorResponse
 import com.example.myapplication.data.model.Favourite
 import com.example.myapplication.data.model.LoginDto
 import com.example.myapplication.data.model.Message
+import com.example.myapplication.data.model.Notification
 import com.example.myapplication.data.model.RegisterDto
 import com.example.myapplication.data.model.Subscription
 import com.example.myapplication.data.model.User
@@ -20,8 +21,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class LoginViewModel(private val apiService: ApiService = RetrofitClient.apiService) : ViewModel() {
-    val _loginState = MutableStateFlow<LoginState>(LoginState.Idle)
+class LoginViewModel : ViewModel() {
+    private val apiService = RetrofitClient.apiService
+
+    private val _loginState = MutableStateFlow<LoginState>(LoginState.Idle)
     val loginState: StateFlow<LoginState> = _loginState.asStateFlow()
 
     private val _registerState = MutableStateFlow<LoginState>(LoginState.Idle)
@@ -50,6 +53,15 @@ class LoginViewModel(private val apiService: ApiService = RetrofitClient.apiServ
 
     private val _userProfileLoading = MutableStateFlow(false)
     val userProfileLoading: StateFlow<Boolean> = _userProfileLoading.asStateFlow()
+
+    private val _chatRequests = MutableStateFlow<List<ChatRequest>>(emptyList())
+    val chatRequests: StateFlow<List<ChatRequest>> = _chatRequests.asStateFlow()
+
+    private val _notifications = MutableStateFlow<List<Notification>>(emptyList())
+    val notifications: StateFlow<List<Notification>> = _notifications.asStateFlow()
+
+    private val _unreadNotificationCount = MutableStateFlow(0)
+    val unreadNotificationCount: StateFlow<Int> = _unreadNotificationCount.asStateFlow()
 
     fun login(userName: String, password: String) {
         viewModelScope.launch {
@@ -129,6 +141,9 @@ class LoginViewModel(private val apiService: ApiService = RetrofitClient.apiServ
         _messages.value = emptyList()
         _sendMessageError.value = null
         _subscription.value = null
+        _chatRequests.value = emptyList()
+        _notifications.value = emptyList()
+        _unreadNotificationCount.value = 0
     }
 
     fun fetchAllUsers() {
@@ -228,6 +243,46 @@ class LoginViewModel(private val apiService: ApiService = RetrofitClient.apiServ
         }
     }
 
+    fun fetchChatRequests(userId: Int) {
+        viewModelScope.launch {
+            try {
+                val response: Response<List<ChatRequest>> = apiService.getChatRequests(userId)
+                if (response.isSuccessful) {
+                    response.body()?.let { _chatRequests.value = it }
+                }
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
+    fun acceptChatRequest(requestId: Int, userId: Int, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                val response = apiService.acceptChatRequest(requestId, mapOf("userId" to userId))
+                if (response.isSuccessful) {
+                    fetchChatRequests(userId)
+                    onSuccess()
+                }
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
+    fun rejectChatRequest(requestId: Int, userId: Int) {
+        viewModelScope.launch {
+            try {
+                val response = apiService.rejectChatRequest(requestId, mapOf("userId" to userId))
+                if (response.isSuccessful) {
+                    fetchChatRequests(userId)
+                }
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
     fun sendMessage(sender: User, receiver: User, content: String) {
         viewModelScope.launch {
             try {
@@ -311,6 +366,123 @@ class LoginViewModel(private val apiService: ApiService = RetrofitClient.apiServ
                 }
             } catch (e: Exception) {
                 // Handle error if needed
+            }
+        }
+    }
+
+    fun fetchNotifications(userId: Int) {
+        viewModelScope.launch {
+            try {
+                val response: Response<List<Notification>> = apiService.getNotifications(userId)
+                if (response.isSuccessful) {
+                    response.body()?.let { _notifications.value = it }
+                }
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
+    fun fetchUnreadNotificationCount(userId: Int) {
+        viewModelScope.launch {
+            try {
+                val response: Response<Map<String, Long>> = apiService.getUnreadNotificationCount(userId)
+                if (response.isSuccessful) {
+                    response.body()?.let { map ->
+                        _unreadNotificationCount.value = map["count"]?.toInt() ?: 0
+                    }
+                }
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
+    fun markNotificationAsRead(notificationId: Long, userId: Int) {
+        viewModelScope.launch {
+            try {
+                val response = apiService.markNotificationAsRead(notificationId, mapOf("userId" to userId))
+                if (response.isSuccessful) {
+                    // Refresh notifications and unread count after marking as read
+                    fetchNotifications(userId)
+                    fetchUnreadNotificationCount(userId)
+                }
+            } catch (e: Exception) {
+                // Handle error if needed
+            }
+        }
+    }
+
+    fun markAllNotificationsAsRead(userId: Int) {
+        viewModelScope.launch {
+            try {
+                val response = apiService.markAllNotificationsAsRead(userId)
+                if (response.isSuccessful) {
+                    // Refresh notifications and unread count after marking all as read
+                    fetchNotifications(userId)
+                    fetchUnreadNotificationCount(userId)
+                }
+            } catch (e: Exception) {
+                // Handle error if needed
+            }
+        }
+    }
+
+    fun getChatRequestStatus(currentUserId: Int, otherUserId: Int): String? {
+        // Check if there's a pending request between these users
+        val pendingRequests = chatRequests.value
+        return pendingRequests.find { request ->
+            (request.sender.id == currentUserId && request.receiver.id == otherUserId) ||
+            (request.sender.id == otherUserId && request.receiver.id == currentUserId)
+        }?.status
+    }
+
+    fun canChatWithUser(currentUserId: Int, otherUserId: Int): Boolean {
+        // Check if there's an accepted request between these users
+        val pendingRequests = chatRequests.value
+        return pendingRequests.any { request ->
+            ((request.sender.id == currentUserId && request.receiver.id == otherUserId) ||
+             (request.sender.id == otherUserId && request.receiver.id == currentUserId)) &&
+            request.status == "ACCEPTED"
+        }
+    }
+
+    fun cancelChatRequest(requestId: Int, userId: Int) {
+        viewModelScope.launch {
+            try {
+                val response = apiService.cancelChatRequest(requestId, userId)
+                if (response.isSuccessful) {
+                    fetchChatRequests(userId)
+                    // Also refresh notifications to remove the canceled request notification
+                    fetchNotifications(userId)
+                }
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
+    fun getChatRequestId(currentUserId: Int, otherUserId: Int): Int? {
+        // Find the request ID between these users
+        val pendingRequests = chatRequests.value
+        return pendingRequests.find { request ->
+            (request.sender.id == currentUserId && request.receiver.id == otherUserId) ||
+            (request.sender.id == otherUserId && request.receiver.id == currentUserId)
+        }?.id
+    }
+
+    fun sendChatRequest(senderId: Int, receiverId: Int) {
+        viewModelScope.launch {
+            try {
+                val response = apiService.sendChatRequest(mapOf("senderId" to senderId, "receiverId" to receiverId))
+                if (response.isSuccessful) {
+                    fetchChatRequests(senderId)
+                    // Also refresh notifications to show the new sent request notification
+                    fetchNotifications(senderId)
+                    fetchUnreadNotificationCount(senderId)
+                }
+            } catch (e: Exception) {
+                // Handle error - could add error state here if needed
             }
         }
     }

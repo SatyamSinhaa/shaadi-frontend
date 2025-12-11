@@ -36,10 +36,12 @@ fun MessagesScreen(
     val loginState by viewModel.loginState.collectAsState()
     val messages by viewModel.messages.collectAsState()
     val chatTargetUser by viewModel.chatTargetUser.collectAsState()
+    val chatRequests by viewModel.chatRequests.collectAsState()
     
     var selectedMessage by remember { mutableStateOf<Message?>(null) }
     // State to track if we are showing a chat with a specific user (passed from other screens)
     var activeChatUser by remember { mutableStateOf<User?>(null) }
+    var showRequestsScreen by remember { mutableStateOf(false) }
 
     // Determine if chat is visible immediately, to avoid flicker
     val isChatVisible = activeChatUser != null || selectedMessage != null
@@ -60,6 +62,7 @@ fun MessagesScreen(
         if (loginState is LoginState.Success) {
             val user = (loginState as LoginState.Success).user
             viewModel.fetchMessages(user.id)
+            viewModel.fetchChatRequests(user.id)
         }
     }
 
@@ -74,7 +77,16 @@ fun MessagesScreen(
     LaunchedEffect(refreshTrigger) {
         selectedMessage = null
         activeChatUser = null
+        showRequestsScreen = false
         viewModel.setChatTargetUser(null)
+    }
+
+    // Calculate pending requests count
+    val currentUser = (loginState as? LoginState.Success)?.user
+    val pendingRequestCount = remember(chatRequests, currentUser) {
+        if (currentUser != null) {
+            chatRequests.count { it.receiver.id == currentUser.id && it.status == "PENDING" }
+        } else 0
     }
 
     // Logic to determine what to show
@@ -115,16 +127,36 @@ fun MessagesScreen(
             // Should not happen if logged in
             selectedMessage = null
         }
+    } else if (showRequestsScreen) {
+        BackHandler {
+            showRequestsScreen = false
+        }
+        RequestScreen(modifier = modifier, onBack = { showRequestsScreen = false }, onChatClick = { user -> activeChatUser = user; showRequestsScreen = false })
     } else {
         Column(
             modifier = modifier
                 .fillMaxSize()
                 .padding(16.dp) // Removed bottom padding
         ) {
-            Text(
-                text = "Messages",
-                style = MaterialTheme.typography.headlineMedium
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Messages",
+                    style = MaterialTheme.typography.headlineMedium
+                )
+                Button(onClick = { showRequestsScreen = true }) {
+                    Text("Requests")
+                    if (pendingRequestCount > 0) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Badge {
+                            Text(pendingRequestCount.toString())
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 

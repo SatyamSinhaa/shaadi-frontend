@@ -4,8 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.GridOn
@@ -88,12 +90,13 @@ fun ProfileView(
 ) {
     // State for tab selection
     var selectedTabIndex by remember { mutableStateOf(0) }
-    val tabs = listOf("Details", "Photos", "Videos")
-    val tabIcons = listOf(Icons.Filled.Info, Icons.Filled.GridOn, Icons.Filled.PlayArrow)
+    val tabs = listOf("Details", "Photos")
+    val tabIcons = listOf(Icons.Filled.Info, Icons.Filled.GridOn)
 
     Column(
         modifier = modifier
-            .fillMaxSize(),
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Profile Header (Fixed at top)
@@ -188,8 +191,6 @@ fun ProfileView(
         // Content below tabs (Scrollable)
         Column(
             modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
             when (selectedTabIndex) {
@@ -289,15 +290,41 @@ fun ProfileView(
                     }
                 }
                 1 -> {
-                   // Empty Tab 2 (Photos)
-                   Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                       Text("No Photos Yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                   }
-                }
-                2 -> {
-                    // Empty Tab 3 (Videos)
-                   Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                       Text("No Videos Yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                   // Photos Tab
+                   Column(modifier = Modifier.fillMaxSize()) {
+                       // Add Photo Button
+                       Button(
+                           onClick = { /* Add Photo Logic */ },
+                           modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                       ) {
+                           Icon(Icons.Filled.Add, contentDescription = "Add Photo")
+                           Spacer(modifier = Modifier.width(8.dp))
+                           Text("Add Photo")
+                       }
+
+                       // Photos Grid (Placeholder for now as user only has one photoUrl)
+                       if (user.photoUrl != null) {
+                           Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                               Card(
+                                   modifier = Modifier.weight(1f).aspectRatio(1f),
+                                   shape = RoundedCornerShape(8.dp),
+                                   elevation = CardDefaults.cardElevation(2.dp)
+                               ) {
+                                   AsyncImage(
+                                       model = user.photoUrl,
+                                       contentDescription = "Photo",
+                                       modifier = Modifier.fillMaxSize(),
+                                       contentScale = ContentScale.Crop
+                                   )
+                               }
+                               // Placeholder for second item in row if needed
+                               Spacer(modifier = Modifier.weight(1f)) 
+                           }
+                       } else {
+                           Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                               Text("No Photos Yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                           }
+                       }
                    }
                 }
             }

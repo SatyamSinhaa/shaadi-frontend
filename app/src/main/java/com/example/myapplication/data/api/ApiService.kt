@@ -1,8 +1,10 @@
 package com.example.myapplication.data.api
 
+import com.example.myapplication.data.model.ChatRequest
 import com.example.myapplication.data.model.Favourite
 import com.example.myapplication.data.model.LoginDto
 import com.example.myapplication.data.model.Message
+import com.example.myapplication.data.model.Notification
 import com.example.myapplication.data.model.Plan
 import com.example.myapplication.data.model.RegisterDto
 import com.example.myapplication.data.model.User
@@ -51,6 +53,21 @@ interface ApiService {
     @POST("api/chat/mark-read/{receiverId}/{senderId}")
     suspend fun markMessagesAsRead(@Path("receiverId") receiverId: Int, @Path("senderId") senderId: Int): Response<Unit>
 
+    @GET("api/chat/requests/{userId}")
+    suspend fun getChatRequests(@Path("userId") userId: Int): Response<List<ChatRequest>>
+
+    @POST("api/chat/request")
+    suspend fun sendChatRequest(@Body body: Map<String, Int>): Response<ChatRequest>
+
+    @POST("api/chat/request/{requestId}/accept")
+    suspend fun acceptChatRequest(@Path("requestId") requestId: Int, @Body body: Map<String, Int>): Response<Unit>
+
+    @POST("api/chat/request/{requestId}/reject")
+    suspend fun rejectChatRequest(@Path("requestId") requestId: Int, @Body body: Map<String, Int>): Response<Unit>
+
+    @DELETE("api/chat/request/{requestId}")
+    suspend fun cancelChatRequest(@Path("requestId") requestId: Int, @Query("userId") userId: Int): Response<Unit>
+
     @POST("api/users/register")
     suspend fun register(@Body registerDto: RegisterDto): Response<User>
 
@@ -71,4 +88,19 @@ interface ApiService {
 
     @POST("api/users/{userId}/purchase-subscription")
     suspend fun purchaseSubscription(@Path("userId") userId: Int, @Body body: Map<String, Int>): Response<Subscription>
+
+    @GET("api/notifications/{userId}")
+    suspend fun getNotifications(@Path("userId") userId: Int): Response<List<Notification>>
+
+    @GET("api/notifications/{userId}/unread")
+    suspend fun getUnreadNotifications(@Path("userId") userId: Int): Response<List<Notification>>
+
+    @GET("api/notifications/{userId}/unread/count")
+    suspend fun getUnreadNotificationCount(@Path("userId") userId: Int): Response<Map<String, Long>>
+
+    @POST("api/notifications/{notificationId}/read")
+    suspend fun markNotificationAsRead(@Path("notificationId") notificationId: Long, @Body body: Map<String, Int>): Response<Unit>
+
+    @POST("api/notifications/{userId}/read-all")
+    suspend fun markAllNotificationsAsRead(@Path("userId") userId: Int): Response<Unit>
 }
