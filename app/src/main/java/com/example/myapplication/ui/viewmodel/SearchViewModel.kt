@@ -28,7 +28,8 @@ class SearchViewModel(private val apiService: ApiService = RetrofitClient.apiSer
         name: String? = null,
         location: String? = null,
         religion: String? = null,
-        gender: String? = null
+        gender: String? = null,
+        currentUserId: Int
     ) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -40,7 +41,8 @@ class SearchViewModel(private val apiService: ApiService = RetrofitClient.apiSer
                     name = name,
                     location = location,
                     religion = religion,
-                    gender = gender
+                    gender = gender,
+                    currentUserId = currentUserId
                 )
                 if (response.isSuccessful) {
                     response.body()?.let { _searchResults.value = it }

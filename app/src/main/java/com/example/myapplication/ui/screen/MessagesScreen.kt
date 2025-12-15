@@ -31,7 +31,8 @@ fun MessagesScreen(
     onBack: () -> Unit = {}, 
     viewModel: LoginViewModel = viewModel(),
     refreshTrigger: Boolean = false,
-    onChatStatusChanged: (Boolean) -> Unit = {}
+    onChatStatusChanged: (Boolean) -> Unit = {},
+    searchQuery: String = ""
 ) {
     val loginState by viewModel.loginState.collectAsState()
     val messages by viewModel.messages.collectAsState()
@@ -63,6 +64,7 @@ fun MessagesScreen(
             val user = (loginState as LoginState.Success).user
             viewModel.fetchMessages(user.id)
             viewModel.fetchChatRequests(user.id)
+            viewModel.fetchBlockedUsers(user.id)
         }
     }
 
@@ -173,6 +175,10 @@ fun MessagesScreen(
                     val uniqueUsers = messages
                         .map { if (it.sender.id == currentUser.id) it.receiver else it.sender }
                         .distinctBy { it.id }
+                        .filter { user ->
+                            searchQuery.isBlank() ||
+                            user.name.startsWith(searchQuery, ignoreCase = true)
+                        }
                         .sortedByDescending { user ->
                             // Sort users by the timestamp of the latest message
                             messages
@@ -180,15 +186,24 @@ fun MessagesScreen(
                                 .maxOfOrNull { it.sentAt }
                         }
 
-                    LazyColumn(
-                        contentPadding = PaddingValues(bottom = 16.dp)
-                    ) {
-                        items(uniqueUsers) { user ->
-                            val conversationMessages = messages.filter { (it.sender.id == currentUser.id && it.receiver.id == user.id) || (it.sender.id == user.id && it.receiver.id == currentUser.id) }
-                            val lastMessage = conversationMessages.maxByOrNull { it.sentAt }
-                            val unreadCount = conversationMessages.count { it.receiver.id == currentUser.id && !it.read }
-                            MessageItem(user = user, lastMessage = lastMessage, unreadCount = unreadCount, onClick = { selectedMessage = lastMessage })
-                            Spacer(modifier = Modifier.height(8.dp))
+                    if (uniqueUsers.isEmpty() && searchQuery.isNotBlank()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("No conversations found")
+                        }
+                    } else {
+                        LazyColumn(
+                            contentPadding = PaddingValues(bottom = 16.dp)
+                        ) {
+                            items(uniqueUsers) { user ->
+                                val conversationMessages = messages.filter { (it.sender.id == currentUser.id && it.receiver.id == user.id) || (it.sender.id == user.id && it.receiver.id == currentUser.id) }
+                                val lastMessage = conversationMessages.maxByOrNull { it.sentAt }
+                                val unreadCount = conversationMessages.count { it.receiver.id == currentUser.id && !it.read }
+                                MessageItem(user = user, lastMessage = lastMessage, unreadCount = unreadCount, onClick = { selectedMessage = lastMessage })
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
                         }
                     }
                 }

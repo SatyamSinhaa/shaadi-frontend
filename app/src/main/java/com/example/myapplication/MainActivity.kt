@@ -8,10 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -23,6 +20,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -32,6 +31,7 @@ import com.example.myapplication.ui.theme.MyApplicationTheme
 import com.example.myapplication.ui.viewmodel.LoginState
 import com.example.myapplication.ui.viewmodel.LoginViewModel
 import com.example.myapplication.ui.viewmodel.PlansViewModel
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,10 +70,19 @@ fun AppNavigation(
     var showHistory by remember { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(false) }
     var showNotifications by remember { mutableStateOf(false) }
+    var showBlockedProfiles by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    // State for Search in Messages
+    var isSearchActive by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
 
     // State to control bottom bar visibility
     var isChatDetailVisible by remember { mutableStateOf(false) }
+
+    // Drawer state
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
     // Navigation Item Definitions
     // 0: Home, 1: Matches, 2: Messages, 3: Profile
@@ -167,6 +176,8 @@ fun AppNavigation(
                                 showPlans = false
                                 showSearch = false
                                 showNotifications = false
+                                isSearchActive = false // Reset search when switching tabs
+                                searchQuery = ""
                                 loginViewModel.selectUser(null)
                                 if (index == 2) refreshMessages = !refreshMessages
                             },
@@ -208,6 +219,7 @@ fun AppNavigation(
             }
 
             if (showChatDetail != null) {
+                // Chat detail takes precedence over user profile or other overlays
                 BackHandler { showChatDetail = null }
                 MessageDetailScreen(
                     modifier = modifier,
@@ -222,7 +234,16 @@ fun AppNavigation(
                     user = selectedUserValue,
                     onBack = { loginViewModel.selectUser(null) },
                     onChatClick = { user -> showChatDetail = user },
-                    onAcceptRequest = {} // Removed: showChatDetail = user, now it just updates state in VM, and user needs to click Chat
+                    onAcceptRequest = {} 
+                )
+            } else if (showBlockedProfiles) {
+                BackHandler { showBlockedProfiles = false }
+                BlockedProfilesScreen(
+                    modifier = modifier,
+                    onBack = { showBlockedProfiles = false },
+                    onUserClick = { userId ->
+                        loginViewModel.fetchUserById(userId)
+                    }
                 )
             } else if (showHistory) {
                 BackHandler { showHistory = false }
@@ -260,6 +281,7 @@ fun AppNavigation(
                     FavouritesScreen(modifier = Modifier.padding(padding), onBack = { showFavourites = false })
                 }
             } else if (showSearch) {
+                // This is the global search screen (not used for messages)
                 BackHandler { showSearch = false }
                 Scaffold(
                     bottomBar = bottomBarContent
@@ -279,82 +301,199 @@ fun AppNavigation(
                     viewModel = loginViewModel
                 )
             } else {
-                Scaffold(
-                    modifier = modifier,
-                    topBar = {
-                        if (!isChatDetailVisible) {
-                            TopAppBar(
-                                title = { Text("Shaadi App") },
-                                actions = {
-                                    IconButton(onClick = {
-                                        showSearch = true
-                                    }) {
-                                        Icon(Icons.Filled.Search, contentDescription = "Search")
-                                    }
-                                    IconButton(onClick = {
-                                        loginViewModel.fetchFavourites(currentUser.id)
-                                        showFavourites = true
-                                    }) {
-                                        Icon(Icons.Filled.Favorite, contentDescription = "Favourites")
-                                    }
-                                    IconButton(onClick = {
-                                        showNotifications = true
-                                    }) {
-                                        if (unreadNotificationCount > 0) {
-                                            BadgedBox(
-                                                badge = {
-                                                    Badge {
-                                                        Text(unreadNotificationCount.toString())
-                                                    }
-                                                }
-                                            ) {
-                                                Icon(Icons.Filled.Notifications, contentDescription = "Notifications")
-                                            }
-                                        } else {
-                                            Icon(Icons.Filled.Notifications, contentDescription = "Notifications")
-                                        }
-                                    }
-                                    if (selectedTab == 3) {
-                                        IconButton(onClick = { /* Menu action */ }) {
-                                            Icon(Icons.Filled.Menu, contentDescription = "Options")
-                                        }
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    ModalNavigationDrawer(
+                        drawerState = drawerState,
+                        drawerContent = {
+                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                ModalDrawerSheet(
+                                    modifier = Modifier.fillMaxWidth(0.7f) // Set width to 70% of screen
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(16.dp)
+                                    ) {
+                                        Text(
+                                            text = "Menu",
+                                            style = MaterialTheme.typography.headlineMedium,
+                                            modifier = Modifier.padding(bottom = 16.dp)
+                                        )
+                                        NavigationDrawerItem(
+                                            label = { Text("Blocked Profiles") },
+                                            selected = false,
+                                            onClick = {
+                                                scope.launch { drawerState.close() }
+                                                showBlockedProfiles = true
+                                            },
+                                            icon = { Icon(Icons.Filled.Block, contentDescription = null) }
+                                        )
+                                        NavigationDrawerItem(
+                                            label = { Text("About Us") },
+                                            selected = false,
+                                            onClick = { /* Handle About click */ scope.launch { drawerState.close() } },
+                                            icon = { Icon(Icons.Filled.Info, contentDescription = null) }
+                                        )
+                                        NavigationDrawerItem(
+                                            label = { Text("Contact Us") },
+                                            selected = false,
+                                            onClick = { /* Handle Contact click */ scope.launch { drawerState.close() } },
+                                            icon = { Icon(Icons.Filled.Email, contentDescription = null) }
+                                        )
+                                        NavigationDrawerItem(
+                                            label = { Text("Terms & Policy") },
+                                            selected = false,
+                                            onClick = { /* Handle Terms click */ scope.launch { drawerState.close() } },
+                                            icon = { Icon(Icons.Filled.Description, contentDescription = null) }
+                                        )
+                                        Spacer(modifier = Modifier.weight(1f))
+                                        NavigationDrawerItem(
+                                            label = { Text("Logout") },
+                                            selected = false,
+                                            onClick = {
+                                                scope.launch { drawerState.close() }
+                                                loginViewModel.logout()
+                                            },
+                                            icon = { Icon(Icons.Filled.ExitToApp, contentDescription = null) }
+                                        )
                                     }
                                 }
-                            )
-                        }
-                    },
-                    bottomBar = {
-                        if (!isChatDetailVisible) {
-                            bottomBarContent()
-                        }
-                    }
-                ) { padding ->
-                    when (selectedTab) {
-                        0 -> HomeScreen(
-                            modifier = Modifier.padding(padding),
-                            viewModel = loginViewModel,
-                            onUserClick = { user ->
-                                loginViewModel.fetchUserById(user.id)
                             }
-                        )
-                        1 -> UserListScreen(
-                            modifier = Modifier.padding(padding),
-                            viewModel = loginViewModel,
-                            onChatClick = { user ->
-                                showChatDetail = user
-                            },
-                            onUserProfileClick = { user ->
-                                loginViewModel.fetchUserById(user.id)
+                        },
+                        gesturesEnabled = true
+                    ) {
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                            Scaffold(
+                                modifier = modifier,
+                                topBar = {
+                                    if (!isChatDetailVisible) {
+                                        if (isSearchActive && selectedTab == 2) {
+                                            // Show Search Bar in TopAppBar when active in Messages tab
+                                            TopAppBar(
+                                                title = {
+                                                    TextField(
+                                                        value = searchQuery,
+                                                        onValueChange = { searchQuery = it },
+                                                        placeholder = { Text("Search messages...") },
+                                                        singleLine = true,
+                                                        colors = TextFieldDefaults.colors(
+                                                            focusedContainerColor = Color.Transparent,
+                                                            unfocusedContainerColor = Color.Transparent,
+                                                            disabledContainerColor = Color.Transparent
+                                                        ),
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    )
+                                                },
+                                                navigationIcon = {
+                                                    IconButton(onClick = { 
+                                                        isSearchActive = false
+                                                        searchQuery = ""
+                                                    }) {
+                                                        Icon(Icons.Filled.ArrowBack, contentDescription = "Close Search")
+                                                    }
+                                                },
+                                                actions = {
+                                                    // Optional: Clear button or search button if needed, but typing usually filters directly
+                                                    if (searchQuery.isNotEmpty()) {
+                                                        IconButton(onClick = { searchQuery = "" }) {
+                                                            Icon(Icons.Filled.Close, contentDescription = "Clear")
+                                                        }
+                                                    }
+                                                }
+                                            )
+                                            BackHandler {
+                                                isSearchActive = false
+                                                searchQuery = ""
+                                            }
+                                        } else {
+                                            // Regular TopAppBar
+                                            TopAppBar(
+                                                title = { Text("Shaadi App") },
+                                                actions = {
+                                                    if (selectedTab != 3) {
+                                                        IconButton(onClick = {
+                                                            if (selectedTab == 2) {
+                                                                isSearchActive = true
+                                                            } else {
+                                                                showSearch = true
+                                                            }
+                                                        }) {
+                                                            Icon(Icons.Filled.Search, contentDescription = "Search")
+                                                        }
+                                                    }
+                                                    IconButton(onClick = {
+                                                        loginViewModel.fetchFavourites(currentUser.id)
+                                                        showFavourites = true
+                                                    }) {
+                                                        Icon(Icons.Filled.Favorite, contentDescription = "Favourites")
+                                                    }
+                                                    IconButton(onClick = {
+                                                        showNotifications = true
+                                                    }) {
+                                                        if (unreadNotificationCount > 0) {
+                                                            BadgedBox(
+                                                                badge = {
+                                                                    Badge {
+                                                                        Text(unreadNotificationCount.toString())
+                                                                    }
+                                                                }
+                                                            ) {
+                                                                Icon(Icons.Filled.Notifications, contentDescription = "Notifications")
+                                                            }
+                                                        } else {
+                                                            Icon(Icons.Filled.Notifications, contentDescription = "Notifications")
+                                                        }
+                                                    }
+                                                    if (selectedTab == 3) {
+                                                        IconButton(onClick = {
+                                                            scope.launch {
+                                                                if (drawerState.isClosed) drawerState.open() else drawerState.close()
+                                                            }
+                                                        }) {
+                                                            Icon(Icons.Filled.Menu, contentDescription = "Options")
+                                                        }
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+                                },
+                                bottomBar = {
+                                    if (!isChatDetailVisible) {
+                                        bottomBarContent()
+                                    }
+                                }
+                            ) { padding ->
+                                when (selectedTab) {
+                                    0 -> HomeScreen(
+                                        modifier = Modifier.padding(padding),
+                                        viewModel = loginViewModel,
+                                        onUserClick = { user ->
+                                            loginViewModel.fetchUserById(user.id)
+                                        }
+                                    )
+                                    1 -> UserListScreen(
+                                        modifier = Modifier.padding(padding),
+                                        viewModel = loginViewModel,
+                                        onChatClick = { user ->
+                                            showChatDetail = user
+                                        },
+                                        onUserProfileClick = { user ->
+                                            loginViewModel.fetchUserById(user.id)
+                                        }
+                                    )
+                                    // Search (2) removed, Messages becomes 2
+                                    2 -> MessagesScreen(
+                                        modifier = Modifier.padding(padding),
+                                        viewModel = loginViewModel,
+                                        refreshTrigger = refreshMessages,
+                                        onChatStatusChanged = { isVisible -> isChatDetailVisible = isVisible },
+                                        searchQuery = searchQuery // Pass the search query down
+                                    )
+                                    3 -> ProfileScreen(modifier = Modifier.padding(padding), viewModel = loginViewModel)
+                                }
                             }
-                        )
-                        // Search (2) removed, Messages becomes 2
-                        2 -> MessagesScreen(
-                            modifier = Modifier.padding(padding),
-                            viewModel = loginViewModel,
-                            refreshTrigger = refreshMessages,
-                            onChatStatusChanged = { isVisible -> isChatDetailVisible = isVisible }
-                        )
-                        3 -> ProfileScreen(modifier = Modifier.padding(padding), viewModel = loginViewModel)
+                        }
                     }
                 }
             }

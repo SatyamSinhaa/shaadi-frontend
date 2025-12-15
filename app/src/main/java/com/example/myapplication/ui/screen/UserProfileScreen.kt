@@ -1,9 +1,11 @@
 package com.example.myapplication.ui.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -12,6 +14,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,6 +45,24 @@ fun UserProfileScreen(
     val loginState by viewModel.loginState.collectAsState()
     val currentUserId = (loginState as? LoginState.Success)?.user?.id
     val chatRequests by viewModel.chatRequests.collectAsState()
+    
+    // Check if user is blocked
+    // The blockedUsers state might not be populated if fetchBlockedUsers wasn't called recently.
+    // However, if we came from BlockedProfilesScreen, it should be.
+    // We can also fetch it here to be sure or assume isBlocked if we add logic.
+    // Let's observe blocked users to check status
+    val blockedUsers by viewModel.blockedUsers.collectAsState()
+    val isBlocked = remember(blockedUsers, user.id) {
+        blockedUsers.any { block ->
+            val blocked = block["blocked"] as? Map<*, *>
+            val blockedId = (blocked?.get("id") as? Double)?.toInt()
+            blockedId == user.id
+        }
+    }
+
+    // Bottom Sheet State
+    var showBottomSheet by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState()
 
     // Find the relevant chat request
     val chatRequest = remember(chatRequests, currentUserId, user.id) {
@@ -58,6 +79,8 @@ fun UserProfileScreen(
     LaunchedEffect(currentUserId) {
         if (currentUserId != null) {
             viewModel.fetchChatRequests(currentUserId)
+            // Ideally we should also ensure blocked users are fetched if we rely on it for UI state
+            viewModel.fetchBlockedUsers(currentUserId)
         }
     }
 
@@ -66,6 +89,71 @@ fun UserProfileScreen(
     val tabs = listOf("Details", "Photos")
     val tabIcons = listOf(Icons.Filled.Info, Icons.Filled.GridOn)
 
+    if (showBottomSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showBottomSheet = false },
+            sheetState = sheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = "Options",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                // Option: Block/Unblock User
+                if (isBlocked) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { 
+                                showBottomSheet = false
+                                if (currentUserId != null) {
+                                    viewModel.unblockUser(currentUserId, user.id) {
+                                        // Refresh blocked users list
+                                        viewModel.fetchBlockedUsers(currentUserId)
+                                    }
+                                }
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(imageVector = Icons.Filled.Check, contentDescription = null) // Using Check icon for Unblock or maybe Undo
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(text = "Unblock User", style = MaterialTheme.typography.bodyLarge)
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { 
+                                showBottomSheet = false
+                                if (currentUserId != null) {
+                                    viewModel.blockUser(currentUserId, user.id) {
+                                        // Optionally navigate back after blocking
+                                        onBack()
+                                    }
+                                }
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(imageVector = Icons.Filled.Close, contentDescription = null)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(text = "Block User", style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -73,6 +161,11 @@ fun UserProfileScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showBottomSheet = true }) {
+                        Icon(imageVector = Icons.Filled.MoreVert, contentDescription = "Options")
                     }
                 }
             )
@@ -143,60 +236,76 @@ fun UserProfileScreen(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             // Action Buttons
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                // Dynamic Chat/Request Button
-                                if (canChat) {
-                                    // Show chat icon if request is accepted
-                                    Button(onClick = { onChatClick(user) }) {
-                                        Icon(Icons.Filled.ChatBubbleOutline, contentDescription = "Chat")
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Chat")
-                                    }
-                                } else if (chatRequest != null && chatRequest.status == "PENDING") {
-                                    // PENDING REQUEST
-                                    if (chatRequest.sender.id == currentUserId) {
-                                        // Current user sent the request -> Show Cancel
-                                        Button(
-                                            onClick = {
-                                                viewModel.cancelChatRequest(chatRequest.id, currentUserId ?: 0)
-                                            },
-                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                                        ) {
-                                            Text("Cancel Request")
+                            // If user is blocked, show ONLY Unblock button here instead of chat/request buttons
+                            if (isBlocked) {
+                                Button(
+                                    onClick = {
+                                        if (currentUserId != null) {
+                                            viewModel.unblockUser(currentUserId, user.id) {
+                                                viewModel.fetchBlockedUsers(currentUserId)
+                                            }
                                         }
-                                    } else {
-                                        // Current user received the request -> Show Accept/Reject
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Text("Unblock")
+                                }
+                            } else {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    // Dynamic Chat/Request Button
+                                    if (canChat) {
+                                        // Show chat icon if request is accepted
+                                        Button(onClick = { onChatClick(user) }) {
+                                            Icon(Icons.Filled.ChatBubbleOutline, contentDescription = "Chat")
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Chat")
+                                        }
+                                    } else if (chatRequest != null && chatRequest.status == "PENDING") {
+                                        // PENDING REQUEST
+                                        if (chatRequest.sender.id == currentUserId) {
+                                            // Current user sent the request -> Show Cancel
                                             Button(
                                                 onClick = {
-                                                    viewModel.acceptChatRequest(chatRequest.id, currentUserId ?: 0, onSuccess = {
-                                                        onAcceptRequest(user)
-                                                    })
+                                                    viewModel.cancelChatRequest(chatRequest.id, currentUserId ?: 0)
                                                 },
+                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                                             ) {
-                                                Icon(Icons.Filled.Check, contentDescription = "Accept")
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text("Accept")
+                                                Text("Cancel Request")
                                             }
-                                            Button(
-                                                onClick = { viewModel.rejectChatRequest(chatRequest.id, currentUserId ?: 0) },
-                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-                                            ) {
-                                                Text("Reject", color = MaterialTheme.colorScheme.onErrorContainer)
+                                        } else {
+                                            // Current user received the request -> Show Accept/Reject
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Button(
+                                                    onClick = {
+                                                        viewModel.acceptChatRequest(chatRequest.id, currentUserId ?: 0, onSuccess = {
+                                                            onAcceptRequest(user)
+                                                        })
+                                                    },
+                                                ) {
+                                                    Icon(Icons.Filled.Check, contentDescription = "Accept")
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("Accept")
+                                                }
+                                                Button(
+                                                    onClick = { viewModel.rejectChatRequest(chatRequest.id, currentUserId ?: 0) },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                                                ) {
+                                                    Text("Reject", color = MaterialTheme.colorScheme.onErrorContainer)
+                                                }
                                             }
                                         }
-                                    }
-                                } else {
-                                    // Show send request button if no request exists or it was rejected/cancelled
-                                    Button(
-                                        onClick = {
-                                            viewModel.sendChatRequest(currentUserId ?: 0, user.id)
+                                    } else {
+                                        // Show send request button if no request exists or it was rejected/cancelled
+                                        Button(
+                                            onClick = {
+                                                viewModel.sendChatRequest(currentUserId ?: 0, user.id)
+                                            }
+                                        ) {
+                                            Text("Send Request")
                                         }
-                                    ) {
-                                        Text("Send Request")
                                     }
                                 }
                             }
@@ -265,9 +374,28 @@ fun UserProfileScreen(
                         }
                     }
                     1 -> {
-                        // Empty Tab 2 (Photos)
-                        Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Text("No Photos Yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        // Photos Grid
+                        if (user.photoUrl != null) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Card(
+                                    modifier = Modifier.weight(1f).aspectRatio(1f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    elevation = CardDefaults.cardElevation(2.dp)
+                                ) {
+                                    AsyncImage(
+                                        model = user.photoUrl,
+                                        contentDescription = "Photo",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+                                // Placeholder for second item
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        } else {
+                            Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                                Text("No Photos Yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }

@@ -55,9 +55,6 @@ fun SearchScreen(
     val loginState by loginViewModel.loginState.collectAsState()
     val selectedUser by loginViewModel.selectedUser.collectAsState()
 
-    val currentUserId = (loginState as? LoginState.Success)?.user?.id
-    val filteredSearchResults = searchResults.filter { it.id != currentUserId }
-
     var name by remember { mutableStateOf("") }
     var showFilterDrawer by remember { mutableStateOf(false) }
     var selectedFilterSection by remember { mutableStateOf<FilterSection?>(null) }
@@ -76,20 +73,27 @@ fun SearchScreen(
     val performSearch = {
         val minAgeInt = minAge.toIntOrNull()
         val maxAgeInt = maxAge.toIntOrNull()
+        val currentUserId = (loginState as? LoginState.Success)?.user?.id
         val currentUserGender = (loginState as? LoginState.Success)?.user?.gender
-        val oppositeGender = when (currentUserGender?.lowercase()) {
-            "male" -> "Female"
-            "female" -> "Male"
-            else -> null
+
+        if (currentUserId != null && currentUserGender != null) {
+            // Determine opposite gender for dating app
+            val searchGender = when (currentUserGender.lowercase()) {
+                "male" -> "Female"
+                "female" -> "Male"
+                else -> null
+            }
+
+            viewModel.searchUsers(
+                minAge = minAgeInt,
+                maxAge = maxAgeInt,
+                name = name.takeIf { it.isNotBlank() },
+                location = cityTown.takeIf { it.isNotBlank() },
+                religion = religion.takeIf { it.isNotBlank() },
+                gender = searchGender,
+                currentUserId = currentUserId
+            )
         }
-        viewModel.searchUsers(
-            minAge = minAgeInt,
-            maxAge = maxAgeInt,
-            name = name.takeIf { it.isNotBlank() },
-            location = cityTown.takeIf { it.isNotBlank() },
-            religion = religion.takeIf { it.isNotBlank() },
-            gender = oppositeGender
-        )
     }
 
     // Handle user selection navigation
@@ -135,17 +139,20 @@ fun SearchScreen(
             Button(
                 onClick = performSearch,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading
+                // enabled = !isLoading // Local search is instant
             ) {
-                if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                } else {
-                    Text("Search")
-                }
+                Text("Search")
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Show loading indicator
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Show error
             error?.let {
                 Text(
                     text = it,
@@ -156,9 +163,12 @@ fun SearchScreen(
             }
 
             // Results
-            if (filteredSearchResults.isNotEmpty()) {
+            val currentUserId = (loginState as? LoginState.Success)?.user?.id
+            val filteredResults = searchResults.filter { it.id != currentUserId }
+
+            if (filteredResults.isNotEmpty()) {
                 Text(
-                    text = "Search Results (${filteredSearchResults.size})",
+                    text = "Search Results (${filteredResults.size})",
                     style = MaterialTheme.typography.headlineSmall
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -166,13 +176,13 @@ fun SearchScreen(
                 LazyColumn(
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
-                    items(filteredSearchResults) { user ->
-                        UserItem(user) { 
+                    items(filteredResults) { user ->
+                        UserItem(user) {
                             loginViewModel.fetchUserById(user.id)
                         }
                     }
                 }
-            } else if (!isLoading && error == null) {
+            } else if (!isLoading && filteredResults.isEmpty() && name.isNotBlank()) {
                 Text("No results found. Try adjusting your filters.")
             }
         }

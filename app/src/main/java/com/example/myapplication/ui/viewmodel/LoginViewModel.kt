@@ -63,6 +63,9 @@ class LoginViewModel : ViewModel() {
     private val _unreadNotificationCount = MutableStateFlow(0)
     val unreadNotificationCount: StateFlow<Int> = _unreadNotificationCount.asStateFlow()
 
+    private val _blockedUsers = MutableStateFlow<List<Map<String, Any>>>(emptyList())
+    val blockedUsers: StateFlow<List<Map<String, Any>>> = _blockedUsers.asStateFlow()
+
     fun login(userName: String, password: String) {
         viewModelScope.launch {
             _loginState.value = LoginState.Loading
@@ -144,10 +147,14 @@ class LoginViewModel : ViewModel() {
         _chatRequests.value = emptyList()
         _notifications.value = emptyList()
         _unreadNotificationCount.value = 0
+        _blockedUsers.value = emptyList()
     }
 
     fun fetchAllUsers() {
-        val currentUserGender = (loginState.value as? LoginState.Success)?.user?.gender
+        val currentUser = (loginState.value as? LoginState.Success)?.user
+        val currentUserGender = currentUser?.gender
+        val currentUserId = currentUser?.id
+
         val oppositeGender = when (currentUserGender?.lowercase()) {
             "male" -> "Female"
             "female" -> "Male"
@@ -155,7 +162,7 @@ class LoginViewModel : ViewModel() {
         }
         viewModelScope.launch {
             try {
-                val response: Response<List<User>> = apiService.getAllUsers(oppositeGender)
+                val response: Response<List<User>> = apiService.getAllUsers(oppositeGender, currentUserId)
                 if (response.isSuccessful) {
                     response.body()?.let { _users.value = it }
                 }
@@ -455,6 +462,7 @@ class LoginViewModel : ViewModel() {
                     fetchChatRequests(userId)
                     // Also refresh notifications to remove the canceled request notification
                     fetchNotifications(userId)
+                    fetchUnreadNotificationCount(userId)
                 }
             } catch (e: Exception) {
                 // Handle error
@@ -484,6 +492,70 @@ class LoginViewModel : ViewModel() {
             } catch (e: Exception) {
                 // Handle error - could add error state here if needed
             }
+        }
+    }
+
+    fun blockUser(blockerId: Int, blockedId: Int, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val response = apiService.blockUser(blockerId, blockedId)
+                if (response.isSuccessful) {
+                    // Refresh users list to remove blocked user
+                    fetchAllUsers()
+                    // Refresh favourites to remove blocked users
+                    fetchFavourites(blockerId)
+                    // Refresh chat requests to remove blocked users
+                    fetchChatRequests(blockerId)
+                    // Refresh messages to remove blocked users
+                    fetchMessages(blockerId)
+                    onSuccess()
+                }
+            } catch (e: Exception) {
+                // Handle error if needed
+            }
+        }
+    }
+
+    fun unblockUser(blockerId: Int, blockedId: Int, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val response = apiService.unblockUser(blockerId, blockedId)
+                if (response.isSuccessful) {
+                    // Refresh users list to show unblocked user
+                    fetchAllUsers()
+                    // Refresh favourites to show unblocked users
+                    fetchFavourites(blockerId)
+                    // Refresh chat requests to show unblocked users
+                    fetchChatRequests(blockerId)
+                    // Refresh messages to show unblocked users
+                    fetchMessages(blockerId)
+                    onSuccess()
+                }
+            } catch (e: Exception) {
+                // Handle error if needed
+            }
+        }
+    }
+
+    fun fetchBlockedUsers(blockerId: Int) {
+        viewModelScope.launch {
+            try {
+                val response = apiService.getBlockedUsers(blockerId)
+                if (response.isSuccessful) {
+                    response.body()?.let { _blockedUsers.value = it }
+                }
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
+    fun isUserBlocked(currentUserId: Int, otherUserId: Int): Boolean {
+        // Check if the other user is in the blocked users list
+        return blockedUsers.value.any { block ->
+            val blocked = block["blocked"] as? Map<*, *>
+            val blockedId = blocked?.get("id") as? Double
+            blockedId?.toInt() == otherUserId
         }
     }
 }

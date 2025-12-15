@@ -23,7 +23,10 @@ interface ApiService {
     suspend fun login(@Body loginDto: LoginDto): Response<User>
 
     @GET("api/users")
-    suspend fun getAllUsers(@retrofit2.http.Query("gender") gender: String? = null): Response<List<User>>
+    suspend fun getAllUsers(
+        @Query("gender") gender: String? = null,
+        @Query("currentUserId") currentUserId: Int? = null
+    ): Response<List<User>>
 
     @GET("api/users/search")
     suspend fun searchUsers(
@@ -32,7 +35,8 @@ interface ApiService {
         @Query("name") name: String? = null,
         @Query("location") location: String? = null,
         @Query("religion") religion: String? = null,
-        @Query("gender") gender: String? = null
+        @Query("gender") gender: String? = null,
+        @Query("currentUserId") currentUserId: Int
     ): Response<List<User>>
 
     @GET("api/users/{userId}/favourites")
@@ -103,4 +107,13 @@ interface ApiService {
 
     @POST("api/notifications/{userId}/read-all")
     suspend fun markAllNotificationsAsRead(@Path("userId") userId: Int): Response<Unit>
+
+    @POST("api/users/{blockerId}/block/{blockedId}")
+    suspend fun blockUser(@Path("blockerId") blockerId: Int, @Path("blockedId") blockedId: Int): Response<Map<String, String>>
+
+    @DELETE("api/users/{blockerId}/block/{blockedId}")
+    suspend fun unblockUser(@Path("blockerId") blockerId: Int, @Path("blockedId") blockedId: Int): Response<Map<String, String>>
+
+    @GET("api/users/{blockerId}/blocked")
+    suspend fun getBlockedUsers(@Path("blockerId") blockerId: Int): Response<List<Map<String, Any>>>
 }

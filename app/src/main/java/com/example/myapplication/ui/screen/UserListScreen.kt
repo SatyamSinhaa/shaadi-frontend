@@ -11,6 +11,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Person
@@ -44,16 +46,18 @@ fun UserListScreen(
     val selectedUser by viewModel.selectedUser.collectAsState()
     val userProfileLoading by viewModel.userProfileLoading.collectAsState(initial = false)
     val favourites by viewModel.favourites.collectAsState()
+    val chatRequests by viewModel.chatRequests.collectAsState()
 
     val currentUserId = (loginState as? LoginState.Success)?.user?.id
     val filteredUsers = users.filter { it.id != currentUserId }
 
     val pagerState = rememberPagerState(pageCount = { filteredUsers.size })
 
-    // Fetch favourites when screen loads or user logs in
+    // Fetch favourites and chat requests when screen loads or user logs in
     LaunchedEffect(currentUserId) {
         if (currentUserId != null) {
             viewModel.fetchFavourites(currentUserId)
+            viewModel.fetchChatRequests(currentUserId)
         }
     }
 
@@ -84,15 +88,62 @@ fun UserListScreen(
             ) { page ->
                 val targetUser = filteredUsers[page]
                 val isFavourite = favourites.any { it.favouritedUser.id == targetUser.id }
+                
+                // Determine chat status
+                val requestStatus = if (currentUserId != null) {
+                    viewModel.getChatRequestStatus(currentUserId, targetUser.id)
+                } else null
+                
+                // Check if we are the sender of a pending request
+                val isPendingSender = if (currentUserId != null) {
+                     chatRequests.any { 
+                        it.sender.id == currentUserId && 
+                        it.receiver.id == targetUser.id && 
+                        it.status == "PENDING" 
+                    }
+                } else false
+
+                // Check if we are the receiver of a pending request (Incoming)
+                val isPendingReceiver = if (currentUserId != null) {
+                     chatRequests.any { 
+                        it.receiver.id == currentUserId && 
+                        it.sender.id == targetUser.id && 
+                        it.status == "PENDING" 
+                    }
+                } else false
 
                 FullPageUserItem(
                     user = targetUser,
                     isFavourite = isFavourite,
                     currentUserId = currentUserId ?: 0,
                     viewModel = viewModel,
+                    requestStatus = requestStatus,
+                    isPendingSender = isPendingSender,
+                    isPendingReceiver = isPendingReceiver,
                     onAction = { action ->
                         when (action) {
-                            "Chat" -> onChatClick(targetUser)
+                            "Chat" -> {
+                                if (requestStatus == "ACCEPTED") {
+                                    onChatClick(targetUser)
+                                } else if (isPendingSender) {
+                                    // Cancel Request
+                                    val requestId = viewModel.getChatRequestId(currentUserId ?: 0, targetUser.id)
+                                    if (requestId != null) {
+                                        viewModel.cancelChatRequest(requestId, currentUserId ?: 0)
+                                    }
+                                } else if (isPendingReceiver) {
+                                    // Accept Request
+                                    val requestId = viewModel.getChatRequestId(currentUserId ?: 0, targetUser.id)
+                                    if (requestId != null) {
+                                        viewModel.acceptChatRequest(requestId, currentUserId ?: 0) {
+                                            // Optional: Handle success if needed (UI updates automatically)
+                                        }
+                                    }
+                                } else if (requestStatus == null) {
+                                    // Send Request
+                                    viewModel.sendChatRequest(currentUserId ?: 0, targetUser.id)
+                                }
+                            }
                             "Wishlist" -> {
                                 if (isFavourite) {
                                     viewModel.removeFavourite(currentUserId ?: 0, targetUser.id)
@@ -100,7 +151,6 @@ fun UserListScreen(
                                     viewModel.addFavourite(currentUserId ?: 0, targetUser.id)
                                 }
                             }
-                            // Removed Interest and Shortlist as requested
                         }
                     },
                     onClick = {
@@ -119,6 +169,9 @@ fun FullPageUserItem(
     isFavourite: Boolean,
     currentUserId: Int,
     viewModel: LoginViewModel,
+    requestStatus: String?,
+    isPendingSender: Boolean,
+    isPendingReceiver: Boolean,
     onAction: (String) -> Unit,
     onClick: () -> Unit = {}
 ) {
@@ -215,9 +268,19 @@ fun FullPageUserItem(
                     label = "Wishlist",
                     onClick = { onAction("Wishlist") }
                 )
+                
+                // Dynamic Chat/Request Button
+                val (icon, label) = when {
+                    requestStatus == "ACCEPTED" -> Icons.Filled.ChatBubbleOutline to "Chat"
+                    isPendingSender -> Icons.Filled.Close to "Cancel Request"
+                    isPendingReceiver -> Icons.Filled.Check to "Accept Request"
+                    requestStatus == "PENDING" -> Icons.Filled.Person to "Request Pending" 
+                    else -> Icons.Filled.Send to "Send Request"
+                }
+                
                 ActionButton(
-                    icon = Icons.Filled.ChatBubbleOutline,
-                    label = "Chat",
+                    icon = icon,
+                    label = label,
                     onClick = { onAction("Chat") }
                 )
             }

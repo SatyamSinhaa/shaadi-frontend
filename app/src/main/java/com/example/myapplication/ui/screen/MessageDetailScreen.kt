@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +32,8 @@ fun MessageDetailScreen(modifier: Modifier = Modifier, receiver: User, onBack: (
     val sendMessageError by viewModel.sendMessageError.collectAsState()
     var newMessage by remember { mutableStateOf("") }
     var showErrorDialog by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
+    var showBlockConfirmation by remember { mutableStateOf(false) }
 
     val currentUser = (loginState as? LoginState.Success)?.user
 
@@ -68,6 +71,33 @@ fun MessageDetailScreen(modifier: Modifier = Modifier, receiver: User, onBack: (
                     viewModel.clearSendMessageError()
                 }) {
                     Text("OK")
+                }
+            }
+        )
+    }
+
+    // Block User Confirmation Dialog
+    if (showBlockConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showBlockConfirmation = false },
+            title = { Text("Block User") },
+            text = { Text("Are you sure you want to block ${receiver.name}? You won't receive messages from them anymore.") },
+            confirmButton = {
+                Button(onClick = {
+                    if (currentUser != null) {
+                        viewModel.blockUser(currentUser.id, receiver.id) {
+                            showBlockConfirmation = false
+                            onBack()
+                        }
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
+                    Text("Block")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showBlockConfirmation = false }) {
+                    Text("Cancel")
                 }
             }
         )
@@ -111,6 +141,23 @@ fun MessageDetailScreen(modifier: Modifier = Modifier, receiver: User, onBack: (
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showMenu = !showMenu }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Options")
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Block User") },
+                            onClick = {
+                                showMenu = false
+                                showBlockConfirmation = true
+                            }
+                        )
                     }
                 }
             )
