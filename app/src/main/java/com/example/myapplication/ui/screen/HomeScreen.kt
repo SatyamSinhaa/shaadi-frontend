@@ -11,13 +11,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,13 +19,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.example.myapplication.R
 import com.example.myapplication.data.model.User
 import com.example.myapplication.ui.viewmodel.LoginViewModel
 import com.example.myapplication.ui.viewmodel.LoginState
@@ -73,7 +69,7 @@ fun HomeScreen(
                     .fillMaxWidth()
                     .height(180.dp),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFC62828)) // Reddish color from screenshot
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     // Decorative text mimicking the screenshot
@@ -155,25 +151,20 @@ fun HomeScreen(
                     SocialMediaButton(
                         name = "Facebook",
                         color = Color(0xFF1877F2),
-                        icon = Icons.Default.Share // Using generic icons as placeholders
+                        painter = painterResource(id = R.drawable.ic_facebook)
                     )
                     SocialMediaButton(
                         name = "Instagram",
                         color = Color(0xFFE4405F),
-                        icon = Icons.Default.ThumbUp
+                        painter = painterResource(id = R.drawable.ic_instagram)
                     )
                     SocialMediaButton(
                         name = "YouTube",
                         color = Color(0xFFFF0000),
-                        icon = Icons.Default.PlayArrow
+                        painter = painterResource(id = R.drawable.ic_youtube)
                     )
                 }
             }
-        }
-        
-        // Bottom spacer to avoid content hiding behind bottom nav
-        item(span = { GridItemSpan(2) }) {
-            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -182,7 +173,7 @@ fun HomeScreen(
 fun SocialMediaButton(
     name: String,
     color: Color,
-    icon: ImageVector,
+    painter: Painter,
     onClick: () -> Unit = {}
 ) {
     Column(
@@ -197,7 +188,7 @@ fun SocialMediaButton(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = icon,
+                painter = painter,
                 contentDescription = name,
                 tint = Color.White,
                 modifier = Modifier.size(24.dp)

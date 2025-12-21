@@ -1,6 +1,7 @@
 package com.example.myapplication.ui.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -16,6 +17,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +28,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.myapplication.data.model.User
@@ -42,14 +46,25 @@ enum class EditSection {
 }
 
 @Composable
-fun ProfileScreen(modifier: Modifier = Modifier, viewModel: LoginViewModel = viewModel()) {
+fun ProfileScreen(
+    modifier: Modifier = Modifier,
+    viewModel: LoginViewModel = viewModel()
+) {
     val loginState by viewModel.loginState.collectAsState()
     val subscription by viewModel.subscription.collectAsState()
     var currentEditSection by remember { mutableStateOf(EditSection.NONE) }
+    var showEnlargedPhoto by remember { mutableStateOf(false) }
 
     when (loginState) {
         is LoginState.Success -> {
             val user = (loginState as LoginState.Success).user
+
+            if (showEnlargedPhoto && user.photoUrl != null) {
+                EnlargedPhotoDialog(
+                    photoUrl = user.photoUrl,
+                    onDismiss = { showEnlargedPhoto = false }
+                )
+            }
 
             if (currentEditSection != EditSection.NONE) {
                 SectionEditForm(
@@ -68,7 +83,8 @@ fun ProfileScreen(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
                     user = user,
                     subscription = subscription,
                     onEditSection = { section -> currentEditSection = section },
-                    onLogout = { viewModel.logout() }
+                    onLogout = { viewModel.logout() },
+                    onPhotoClick = { if (user.photoUrl != null) showEnlargedPhoto = true }
                 )
             }
         }
@@ -81,12 +97,53 @@ fun ProfileScreen(modifier: Modifier = Modifier, viewModel: LoginViewModel = vie
 }
 
 @Composable
+fun EnlargedPhotoDialog(photoUrl: String, onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false) // Use full screen width
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.9f))
+                .clickable { onDismiss() }, // Click anywhere to dismiss
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncImage(
+                model = photoUrl,
+                contentDescription = "Enlarged Profile Photo",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f) // Square aspect ratio or adjust as needed
+                    .padding(16.dp),
+                contentScale = ContentScale.Fit
+            )
+            
+            // Optional close button for better UX
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Close",
+                    tint = Color.White
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun ProfileView(
     modifier: Modifier = Modifier,
     user: User,
     subscription: com.example.myapplication.data.model.Subscription? = null,
     onEditSection: (EditSection) -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onPhotoClick: () -> Unit = {}
 ) {
     // State for tab selection
     var selectedTabIndex by remember { mutableStateOf(0) }
@@ -118,7 +175,8 @@ fun ProfileView(
                             modifier = Modifier
                                 .size(100.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable { onPhotoClick() }, // Make photo clickable
                             contentAlignment = Alignment.Center
                         ) {
                             if (user.photoUrl != null) {
@@ -160,7 +218,7 @@ fun ProfileView(
                     IconButton(
                         onClick = { onEditSection(EditSection.HEADER) },
                         modifier = Modifier
-                            .align(Alignment.TopEnd)
+                            .align(Alignment.BottomEnd)
                             .padding(4.dp)
                     ) {
                         Icon(
@@ -249,28 +307,6 @@ fun ProfileView(
                         ProfileField(label = "District", value = user.district)
                         ProfileField(label = "State", value = user.state)
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Subscription Section
-                    if (subscription != null) {
-                        ProfileSection(title = "Subscription Details") {
-                            val formattedExpiry = try {
-                                val parsedDate = try {
-                                    java.time.LocalDateTime.parse(subscription.expiryDate).toLocalDate()
-                                } catch (e: Exception) {
-                                    java.time.LocalDate.parse(subscription.expiryDate)
-                                }
-                                DateTimeFormatter.ofPattern("dd MMM yyyy").format(parsedDate)
-                            } catch (e: Exception) {
-                                subscription.expiryDate
-                            }
-                            ProfileField(label = "Plan Name", value = subscription.planName)
-                            ProfileField(label = "Plan Duration (Months)", value = subscription.planDurationMonths.toString())
-                            ProfileField(label = "Expiry Date", value = formattedExpiry)
-                            ProfileField(label = "Chat Limit", value = subscription.chatLimit.toString())
-                            ProfileField(label = "Plan Chat Limit", value = subscription.planChatLimit.toString())
-                        }
-                    }
                     
                     Spacer(modifier = Modifier.height(24.dp))
 
@@ -308,7 +344,8 @@ fun ProfileView(
                                Card(
                                    modifier = Modifier.weight(1f).aspectRatio(1f),
                                    shape = RoundedCornerShape(8.dp),
-                                   elevation = CardDefaults.cardElevation(2.dp)
+                                   elevation = CardDefaults.cardElevation(2.dp),
+                                   onClick = { onPhotoClick() } // Enlarge photo on click from grid as well
                                ) {
                                    AsyncImage(
                                        model = user.photoUrl,
@@ -367,7 +404,7 @@ fun ProfileSection(
                                 Icon(
                                     imageVector = Icons.Filled.Warning,
                                     contentDescription = "Missing Information",
-                                    tint = Color.Red,
+                                    tint = MaterialTheme.colorScheme.error,
                                     modifier = Modifier
                                         .size(12.dp)
                                         .align(Alignment.TopEnd)

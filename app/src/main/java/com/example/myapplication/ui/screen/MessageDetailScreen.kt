@@ -1,9 +1,12 @@
 package com.example.myapplication.ui.screen
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -21,6 +24,7 @@ import com.example.myapplication.data.model.Message
 import com.example.myapplication.data.model.User
 import com.example.myapplication.ui.viewmodel.LoginViewModel
 import com.example.myapplication.ui.viewmodel.LoginState
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -28,7 +32,7 @@ import java.util.Locale
 @Composable
 fun MessageDetailScreen(modifier: Modifier = Modifier, receiver: User, onBack: () -> Unit, viewModel: LoginViewModel = viewModel()) {
     val loginState by viewModel.loginState.collectAsState()
-    val messages by viewModel.messages.collectAsState()
+    val allMessages by viewModel.messages.collectAsState() // Observe messages in real-time
     val sendMessageError by viewModel.sendMessageError.collectAsState()
     var newMessage by remember { mutableStateOf("") }
     var showErrorDialog by remember { mutableStateOf(false) }
@@ -37,11 +41,34 @@ fun MessageDetailScreen(modifier: Modifier = Modifier, receiver: User, onBack: (
 
     val currentUser = (loginState as? LoginState.Success)?.user
 
-    // Refresh messages when entering chat and mark as read
+    // LazyListState for scroll management
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // Filter messages for this conversation and sort by time
+    val conversationMessages = remember(allMessages, currentUser, receiver) {
+        allMessages.filter {
+            (it.sender.id == currentUser?.id && it.receiver.id == receiver.id) ||
+            (it.sender.id == receiver.id && it.receiver.id == currentUser?.id)
+        }.sortedBy { it.sentAt }
+    }
+
+    // Load initial messages and mark as read when entering chat
     LaunchedEffect(currentUser, receiver) {
         currentUser?.let {
-            // Mark messages as read (this will also fetch updated messages)
+            Log.d("MessageDetailScreen", "🔄 Loading initial messages for conversation")
+            viewModel.fetchMessages(it.id)
             viewModel.markMessagesAsRead(it.id, receiver.id)
+        }
+    }
+
+    // Auto-scroll to bottom when new messages arrive
+    LaunchedEffect(conversationMessages.size) {
+        if (conversationMessages.isNotEmpty()) {
+            Log.d("MessageDetailScreen", "📜 Auto-scrolling to message ${conversationMessages.size}")
+            coroutineScope.launch {
+                listState.animateScrollToItem(conversationMessages.size - 1)
+            }
         }
     }
 
@@ -51,11 +78,6 @@ fun MessageDetailScreen(modifier: Modifier = Modifier, receiver: User, onBack: (
             showErrorDialog = true
         }
     }
-
-    val conversationMessages = messages.filter {
-        (it.sender.id == currentUser?.id && it.receiver.id == receiver.id) ||
-        (it.sender.id == receiver.id && it.receiver.id == currentUser?.id)
-    }.sortedBy { it.sentAt }
 
     if (showErrorDialog && sendMessageError != null) {
         AlertDialog(
@@ -104,10 +126,8 @@ fun MessageDetailScreen(modifier: Modifier = Modifier, receiver: User, onBack: (
     }
 
     Scaffold(
-        // Fix for double padding (NavBar + IME)
-        modifier = modifier.windowInsetsPadding(
-            WindowInsets.ime.exclude(WindowInsets.navigationBars)
-        ),
+        contentWindowInsets = WindowInsets.statusBars,
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = {
@@ -161,54 +181,56 @@ fun MessageDetailScreen(modifier: Modifier = Modifier, receiver: User, onBack: (
                     }
                 }
             )
+        },
+        bottomBar = {
+            Surface(
+                color = MaterialTheme.colorScheme.background,
+                tonalElevation = 0.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = newMessage,
+                        onValueChange = { newMessage = it },
+                        label = { Text("Type a message") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = {
+                        if (newMessage.isNotBlank() && currentUser != null) {
+                            Log.d("MessageDetailScreen", "📤 Sending message: $newMessage")
+                            viewModel.sendMessage(currentUser, receiver, newMessage)
+                            newMessage = ""
+                            // No need to refresh - WebSocket will deliver the message
+                        }
+                    }) {
+                        Text("Send")
+                    }
+                }
+            }
         }
     ) { padding ->
-        // Applied consumeWindowInsets to avoid double padding issues if Scaffold handles insets
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .consumeWindowInsets(padding) 
-                .windowInsetsPadding(
-                    WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
-                )
+                .consumeWindowInsets(padding)
         ) {
-            // Messages list
+            // Messages list with auto-scroll
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 16.dp),
-                reverseLayout = false // Keep standard order, but ensure scrolling to bottom if needed
+                reverseLayout = false
             ) {
                 items(conversationMessages) { message ->
                     ChatBubble(message = message, currentUserId = currentUser?.id ?: 0)
                     Spacer(modifier = Modifier.height(8.dp))
-                }
-            }
-
-            // Message input
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = newMessage,
-                    onValueChange = { newMessage = it },
-                    label = { Text("Type a message") },
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = {
-                    if (newMessage.isNotBlank() && currentUser != null) {
-                        viewModel.sendMessage(currentUser, receiver, newMessage)
-                        newMessage = ""
-                        // Refresh messages after sending
-                        currentUser.let { viewModel.refreshMessages(it.id) }
-                    }
-                }) {
-                    Text("Send")
                 }
             }
         }

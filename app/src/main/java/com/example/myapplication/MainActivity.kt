@@ -39,9 +39,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    AppNavigation(modifier = Modifier.padding(innerPadding))
-                }
+                AppNavigation()
             }
         }
     }
@@ -71,6 +69,7 @@ fun AppNavigation(
     var showSearch by remember { mutableStateOf(false) }
     var showNotifications by remember { mutableStateOf(false) }
     var showBlockedProfiles by remember { mutableStateOf(false) }
+    var showSubscriptionDetails by remember { mutableStateOf(false) } // Add this state
     val context = LocalContext.current
 
     // State for Search in Messages
@@ -165,7 +164,9 @@ fun AppNavigation(
 
             // Common Bottom Bar Composable to reduce duplication
             val bottomBarContent: @Composable () -> Unit = {
-                NavigationBar {
+                NavigationBar(
+                    modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)
+                ) {
                     navItems.forEach { (label, icon, index) ->
                         NavigationBarItem(
                             selected = selectedTab == index,
@@ -244,6 +245,13 @@ fun AppNavigation(
                     onUserClick = { userId ->
                         loginViewModel.fetchUserById(userId)
                     }
+                )
+            } else if (showSubscriptionDetails) {
+                BackHandler { showSubscriptionDetails = false }
+                SubscriptionDetailScreen(
+                    modifier = modifier,
+                    onBack = { showSubscriptionDetails = false },
+                    viewModel = loginViewModel
                 )
             } else if (showHistory) {
                 BackHandler { showHistory = false }
@@ -329,6 +337,15 @@ fun AppNavigation(
                                             icon = { Icon(Icons.Filled.Block, contentDescription = null) }
                                         )
                                         NavigationDrawerItem(
+                                            label = { Text("Subscription Details") },
+                                            selected = false,
+                                            onClick = {
+                                                scope.launch { drawerState.close() }
+                                                showSubscriptionDetails = true
+                                            },
+                                            icon = { Icon(Icons.Filled.Payment, contentDescription = null) }
+                                        )
+                                        NavigationDrawerItem(
                                             label = { Text("About Us") },
                                             selected = false,
                                             onClick = { /* Handle About click */ scope.launch { drawerState.close() } },
@@ -360,7 +377,7 @@ fun AppNavigation(
                                 }
                             }
                         },
-                        gesturesEnabled = true
+                        gesturesEnabled = drawerState.isOpen
                     ) {
                         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                             Scaffold(

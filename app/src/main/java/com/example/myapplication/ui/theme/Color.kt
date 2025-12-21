@@ -2,8 +2,9 @@ package com.example.myapplication.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val ShaadiPrimary = Color(0xFFFF5A60)
-val ShaadiPrimaryVariant = Color(0xFFD93A40)
+// Changed to Blue as requested
+val ShaadiPrimary = Color(0xFF2196F3)
+val ShaadiPrimaryVariant = Color(0xFF1976D2)
 val ShaadiSecondary = Color(0xFF2D2D2D)
 val ShaadiBackground = Color(0xFFFFFFFF)
 val ShaadiSurface = Color(0xFFF5F5F5)

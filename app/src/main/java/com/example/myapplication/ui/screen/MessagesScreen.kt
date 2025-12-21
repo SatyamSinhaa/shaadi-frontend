@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,21 +39,18 @@ fun MessagesScreen(
     val messages by viewModel.messages.collectAsState()
     val chatTargetUser by viewModel.chatTargetUser.collectAsState()
     val chatRequests by viewModel.chatRequests.collectAsState()
+    val isWebSocketConnected by viewModel.isWebSocketConnected.collectAsState()
     
     var selectedMessage by remember { mutableStateOf<Message?>(null) }
-    // State to track if we are showing a chat with a specific user (passed from other screens)
     var activeChatUser by remember { mutableStateOf<User?>(null) }
     var showRequestsScreen by remember { mutableStateOf(false) }
 
-    // Determine if chat is visible immediately, to avoid flicker
     val isChatVisible = activeChatUser != null || selectedMessage != null
     
-    // Use side effect to notify parent about chat visibility change
     SideEffect {
         onChatStatusChanged(isChatVisible)
     }
 
-    // Reset chat status when leaving the screen (e.g. tab switch)
     DisposableEffect(Unit) {
         onDispose {
             onChatStatusChanged(false)
@@ -68,14 +66,12 @@ fun MessagesScreen(
         }
     }
 
-    // Effect to handle external chat requests (e.g. from Home screen)
     LaunchedEffect(chatTargetUser) {
         if (chatTargetUser != null) {
             activeChatUser = chatTargetUser
         }
     }
 
-    // Effect to handle refresh/reset (e.g. clicking bottom bar tab again)
     LaunchedEffect(refreshTrigger) {
         selectedMessage = null
         activeChatUser = null
@@ -83,7 +79,6 @@ fun MessagesScreen(
         viewModel.setChatTargetUser(null)
     }
 
-    // Calculate pending requests count
     val currentUser = (loginState as? LoginState.Success)?.user
     val pendingRequestCount = remember(chatRequests, currentUser) {
         if (currentUser != null) {
@@ -91,11 +86,6 @@ fun MessagesScreen(
         } else 0
     }
 
-    // Logic to determine what to show
-    // If activeChatUser is set, show DetailScreen for that user
-    // Else if selectedMessage is set, show DetailScreen for the user in that message
-    // Else show list
-    
     if (activeChatUser != null) {
         BackHandler {
             activeChatUser = null
@@ -126,7 +116,6 @@ fun MessagesScreen(
                 viewModel = viewModel
             )
         } else {
-            // Should not happen if logged in
             selectedMessage = null
         }
     } else if (showRequestsScreen) {
@@ -138,17 +127,43 @@ fun MessagesScreen(
         Column(
             modifier = modifier
                 .fillMaxSize()
-                .padding(16.dp) // Removed bottom padding
+                .padding(16.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Messages",
-                    style = MaterialTheme.typography.headlineMedium
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Messages",
+                        style = MaterialTheme.typography.headlineMedium
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    
+                    // Improved status indicator
+                    if (isWebSocketConnected) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF4CAF50)) // Green for connected
+                        )
+                    } else {
+                        // Display a subtle label instead of a gray dot
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                text = "Polling",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
                 Button(onClick = { showRequestsScreen = true }) {
                     Text("Requests")
                     if (pendingRequestCount > 0) {
@@ -177,13 +192,12 @@ fun MessagesScreen(
                         .distinctBy { it.id }
                         .filter { user ->
                             searchQuery.isBlank() ||
-                            user.name.startsWith(searchQuery, ignoreCase = true)
+                            user.name.contains(searchQuery, ignoreCase = true)
                         }
                         .sortedByDescending { user ->
-                            // Sort users by the timestamp of the latest message
                             messages
                                 .filter { (it.sender.id == currentUser.id && it.receiver.id == user.id) || (it.sender.id == user.id && it.receiver.id == currentUser.id) }
-                                .maxOfOrNull { it.sentAt }
+                                .maxOfOrNull { it.sentAt } ?: ""
                         }
 
                     if (uniqueUsers.isEmpty() && searchQuery.isNotBlank()) {
@@ -226,7 +240,6 @@ fun MessageItem(user: User, lastMessage: Message?, unreadCount: Int = 0, onClick
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Profile Image
             Box(
                 modifier = Modifier
                     .size(56.dp)
@@ -252,15 +265,24 @@ fun MessageItem(user: User, lastMessage: Message?, unreadCount: Int = 0, onClick
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            // Content
             Column(
                 modifier = Modifier.weight(1f)
             ) {
-                Text(
-                    text = user.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = user.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    if (unreadCount > 0) {
+                        Badge { Text(unreadCount.toString()) }
+                    }
+                }
                 
                 Spacer(modifier = Modifier.height(4.dp))
                 
@@ -271,43 +293,6 @@ fun MessageItem(user: User, lastMessage: Message?, unreadCount: Int = 0, onClick
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
-                    val displayTime = try {
-                        val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
-                        val date = dateFormat.parse(it.sentAt)
-                        timeFormat.format(date)
-                    } catch (e: Exception) {
-                        it.sentAt // fallback to original if parsing fails
-                    }
-                    Text(
-                        text = displayTime,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } ?: Text(
-                    text = "No messages yet",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // Unread count badge
-            if (unreadCount > 0) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (unreadCount > 99) "99+" else unreadCount.toString(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        fontWeight = FontWeight.Bold
                     )
                 }
             }

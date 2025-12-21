@@ -165,7 +165,7 @@ fun RequestItem(
             Row {
                 IconButton(
                     onClick = onReject,
-                    colors = IconButtonDefaults.iconButtonColors(contentColor = Color.Red)
+                    colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
                     Icon(Icons.Default.Close, contentDescription = "Reject")
                 }

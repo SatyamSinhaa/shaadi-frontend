@@ -1,8 +1,10 @@
 package com.example.myapplication.ui.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.api.RetrofitClient
+import com.example.myapplication.data.api.WebSocketMessage
 import com.example.myapplication.data.model.ChatRequest
 import com.example.myapplication.data.model.ErrorResponse
 import com.example.myapplication.data.model.Favourite
@@ -12,9 +14,11 @@ import com.example.myapplication.data.model.Notification
 import com.example.myapplication.data.model.RegisterDto
 import com.example.myapplication.data.model.Subscription
 import com.example.myapplication.data.model.User
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import retrofit2.Response
 import java.text.SimpleDateFormat
@@ -23,6 +27,92 @@ import java.util.Locale
 
 class LoginViewModel : ViewModel() {
     private val apiService = RetrofitClient.apiService
+    private val webSocketManager = RetrofitClient.webSocketManager
+
+    init {
+        // Collect WebSocket messages and update appropriate states
+        viewModelScope.launch {
+            try {
+                webSocketManager.messageFlow.collect { webSocketMessage ->
+                    when (webSocketMessage) {
+                        is WebSocketMessage.ChatMessage -> {
+                            Log.i("LoginViewModel", "🔔 WebSocket ChatMessage received: ${webSocketMessage.message.content}")
+                            val currentMessages = _messages.value.toMutableList()
+                            // Check if message already exists (avoid duplicates)
+                            val messageExists = currentMessages.any { it.id == webSocketMessage.message.id }
+                            if (!messageExists) {
+                                currentMessages.add(webSocketMessage.message)
+                                _messages.value = currentMessages
+                                Log.i("LoginViewModel", "✅ Real-time message added to StateFlow. Total messages: ${currentMessages.size}")
+                            } else {
+                                Log.d("LoginViewModel", "⚠️ Duplicate message detected, skipping")
+                            }
+                        }
+                        is WebSocketMessage.ChatRequestMessage -> {
+                            Log.d("LoginViewModel", "🔔 WebSocket ChatRequest received")
+                            val currentRequests = _chatRequests.value.toMutableList()
+                            // Check if request already exists (avoid duplicates)
+                            val requestExists = currentRequests.any { it.id == webSocketMessage.chatRequest.id }
+                            if (!requestExists) {
+                                currentRequests.add(webSocketMessage.chatRequest)
+                                _chatRequests.value = currentRequests
+                                Log.d("LoginViewModel", "✅ ChatRequest added to StateFlow")
+                            }
+                        }
+                        is WebSocketMessage.NotificationMessage -> {
+                            Log.d("LoginViewModel", "🔔 WebSocket Notification received")
+                            val currentNotifications = _notifications.value.toMutableList()
+                            // Check if notification already exists (avoid duplicates)
+                            val notificationExists = currentNotifications.any { it.id == webSocketMessage.notification.id }
+                            if (!notificationExists) {
+                                currentNotifications.add(0, webSocketMessage.notification) // Add to beginning for latest first
+                                _notifications.value = currentNotifications
+                                // Update unread count
+                                _unreadNotificationCount.value = _unreadNotificationCount.value + 1
+                                Log.d("LoginViewModel", "✅ Notification added to StateFlow")
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("LoginViewModel", "❌ Error in WebSocket message collection", e)
+            }
+        }
+
+        // Fallback polling when WebSocket is disconnected
+        viewModelScope.launch {
+            try {
+                webSocketManager.isConnected.collect { isConnected ->
+                    if (!isConnected && loginState.value is LoginState.Success) {
+                        val user = (loginState.value as LoginState.Success).user
+                        Log.w("LoginViewModel", "⚠️ WebSocket disconnected, starting fallback polling for user ${user.id}")
+                        startFallbackPolling(user.id)
+                    } else if (isConnected) {
+                        Log.i("LoginViewModel", "🟢 WebSocket connected, stopping fallback polling")
+                        // WebSocket is working, no need for polling
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("LoginViewModel", "❌ Error in WebSocket connection monitoring", e)
+            }
+        }
+    }
+
+    private fun startFallbackPolling(userId: Int) {
+        viewModelScope.launch {
+            while (webSocketManager.isConnected.value == false && loginState.value is LoginState.Success) {
+                try {
+                    Log.d("LoginViewModel", "🔄 Fallback polling: fetching messages for user $userId")
+                    fetchMessages(userId)
+                    fetchChatRequests(userId)
+                    delay(10000L) // Poll every 10 seconds
+                } catch (e: Exception) {
+                    Log.e("LoginViewModel", "❌ Error during fallback polling", e)
+                    delay(30000L) // Wait longer on error
+                }
+            }
+        }
+    }
 
     private val _loginState = MutableStateFlow<LoginState>(LoginState.Idle)
     val loginState: StateFlow<LoginState> = _loginState.asStateFlow()
@@ -66,17 +156,27 @@ class LoginViewModel : ViewModel() {
     private val _blockedUsers = MutableStateFlow<List<Map<String, Any>>>(emptyList())
     val blockedUsers: StateFlow<List<Map<String, Any>>> = _blockedUsers.asStateFlow()
 
+    // Expose WebSocket connection status
+    val isWebSocketConnected = webSocketManager.isConnected
+
     fun login(userName: String, password: String) {
         viewModelScope.launch {
             _loginState.value = LoginState.Loading
             // Clear previous messages when starting new login
             _messages.value = emptyList()
-            
+
             try {
                 val response = apiService.login(LoginDto(userName, password))
                 if (response.isSuccessful) {
                     response.body()?.let { user ->
                         _loginState.value = LoginState.Success(user)
+                        // Connect to WebSocket for real-time messages
+                        try {
+                            webSocketManager.connect(user.id)
+                            Log.i("LoginViewModel", "WebSocket connection initiated for user ${user.id}")
+                        } catch (e: Exception) {
+                            Log.e("LoginViewModel", "Failed to connect WebSocket, will use polling", e)
+                        }
                         fetchSubscription(user.id)
                         fetchAllUsers()
                     } ?: run {
@@ -136,6 +236,9 @@ class LoginViewModel : ViewModel() {
     }
 
     fun logout() {
+        // Disconnect WebSocket before clearing state
+        webSocketManager.disconnect()
+
         _loginState.value = LoginState.Idle
         _users.value = emptyList()
         _favourites.value = emptyList()
@@ -299,6 +402,9 @@ class LoginViewModel : ViewModel() {
                 val message = Message(sender = sender, receiver = receiver, content = content, sentAt = currentTimestamp)
                 val response: Response<Message> = apiService.sendMessage(message)
                 if (response.isSuccessful) {
+                    Log.d("LoginViewModel", "✅ Message sent successfully")
+                    // Fetch messages as fallback to ensure sender sees their message
+                    // WebSocket should deliver to receiver in real-time
                     fetchMessages(sender.id)
                 } else {
                     val errorBody = response.errorBody()?.string()

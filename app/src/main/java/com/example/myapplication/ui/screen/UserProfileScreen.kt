@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,10 +48,6 @@ fun UserProfileScreen(
     val chatRequests by viewModel.chatRequests.collectAsState()
     
     // Check if user is blocked
-    // The blockedUsers state might not be populated if fetchBlockedUsers wasn't called recently.
-    // However, if we came from BlockedProfilesScreen, it should be.
-    // We can also fetch it here to be sure or assume isBlocked if we add logic.
-    // Let's observe blocked users to check status
     val blockedUsers by viewModel.blockedUsers.collectAsState()
     val isBlocked = remember(blockedUsers, user.id) {
         blockedUsers.any { block ->
@@ -63,6 +60,9 @@ fun UserProfileScreen(
     // Bottom Sheet State
     var showBottomSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
+
+    // Photo Enlargement State
+    var showEnlargedPhoto by remember { mutableStateOf(false) }
 
     // Find the relevant chat request
     val chatRequest = remember(chatRequests, currentUserId, user.id) {
@@ -79,7 +79,6 @@ fun UserProfileScreen(
     LaunchedEffect(currentUserId) {
         if (currentUserId != null) {
             viewModel.fetchChatRequests(currentUserId)
-            // Ideally we should also ensure blocked users are fetched if we rely on it for UI state
             viewModel.fetchBlockedUsers(currentUserId)
         }
     }
@@ -88,6 +87,13 @@ fun UserProfileScreen(
     var selectedTabIndex by remember { mutableStateOf(0) }
     val tabs = listOf("Details", "Photos")
     val tabIcons = listOf(Icons.Filled.Info, Icons.Filled.GridOn)
+
+    if (showEnlargedPhoto && user.photoUrl != null) {
+        EnlargedPhotoDialog(
+            photoUrl = user.photoUrl,
+            onDismiss = { showEnlargedPhoto = false }
+        )
+    }
 
     if (showBottomSheet) {
         ModalBottomSheet(
@@ -115,7 +121,6 @@ fun UserProfileScreen(
                                 showBottomSheet = false
                                 if (currentUserId != null) {
                                     viewModel.unblockUser(currentUserId, user.id) {
-                                        // Refresh blocked users list
                                         viewModel.fetchBlockedUsers(currentUserId)
                                     }
                                 }
@@ -123,7 +128,7 @@ fun UserProfileScreen(
                             .padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(imageVector = Icons.Filled.Check, contentDescription = null) // Using Check icon for Unblock or maybe Undo
+                        Icon(imageVector = Icons.Filled.Check, contentDescription = null)
                         Spacer(modifier = Modifier.width(16.dp))
                         Text(text = "Unblock User", style = MaterialTheme.typography.bodyLarge)
                     }
@@ -135,7 +140,6 @@ fun UserProfileScreen(
                                 showBottomSheet = false
                                 if (currentUserId != null) {
                                     viewModel.blockUser(currentUserId, user.id) {
-                                        // Optionally navigate back after blocking
                                         onBack()
                                     }
                                 }
@@ -194,9 +198,10 @@ fun UserProfileScreen(
                         // Profile Photo
                         Box(
                             modifier = Modifier
-                                .size(100.dp) // Matched to ProfileScreen
+                                .size(100.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable { if (user.photoUrl != null) showEnlargedPhoto = true },
                             contentAlignment = Alignment.Center
                         ) {
                             if (user.photoUrl != null) {
@@ -218,9 +223,9 @@ fun UserProfileScreen(
                         Spacer(modifier = Modifier.width(24.dp))
                         
                         Column(
-                            verticalArrangement = Arrangement.Center, // Matched to ProfileScreen
+                            verticalArrangement = Arrangement.Center,
                             horizontalAlignment = Alignment.Start,
-                            modifier = Modifier.weight(1f) // Ensure column takes remaining space
+                            modifier = Modifier.weight(1f)
                         ) {
                             Text(
                                 text = user.name,
@@ -236,7 +241,6 @@ fun UserProfileScreen(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             // Action Buttons
-                            // If user is blocked, show ONLY Unblock button here instead of chat/request buttons
                             if (isBlocked) {
                                 Button(
                                     onClick = {
@@ -255,18 +259,14 @@ fun UserProfileScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    // Dynamic Chat/Request Button
                                     if (canChat) {
-                                        // Show chat icon if request is accepted
                                         Button(onClick = { onChatClick(user) }) {
                                             Icon(Icons.Filled.ChatBubbleOutline, contentDescription = "Chat")
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Text("Chat")
                                         }
                                     } else if (chatRequest != null && chatRequest.status == "PENDING") {
-                                        // PENDING REQUEST
                                         if (chatRequest.sender.id == currentUserId) {
-                                            // Current user sent the request -> Show Cancel
                                             Button(
                                                 onClick = {
                                                     viewModel.cancelChatRequest(chatRequest.id, currentUserId ?: 0)
@@ -276,7 +276,6 @@ fun UserProfileScreen(
                                                 Text("Cancel Request")
                                             }
                                         } else {
-                                            // Current user received the request -> Show Accept/Reject
                                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 Button(
                                                     onClick = {
@@ -298,7 +297,6 @@ fun UserProfileScreen(
                                             }
                                         }
                                     } else {
-                                        // Show send request button if no request exists or it was rejected/cancelled
                                         Button(
                                             onClick = {
                                                 viewModel.sendChatRequest(currentUserId ?: 0, user.id)
@@ -314,7 +312,6 @@ fun UserProfileScreen(
                 }
             )
 
-            // Tab Row (Instagram Style)
             TabRow(
                 selectedTabIndex = selectedTabIndex,
                 containerColor = MaterialTheme.colorScheme.surface,
@@ -329,14 +326,12 @@ fun UserProfileScreen(
                 }
             }
 
-            // Content below tabs
             Column(
                 modifier = Modifier
                     .padding(16.dp)
             ) {
                 when (selectedTabIndex) {
                     0 -> {
-                        // Bio Section
                         if (user.bio != null) {
                             ProfileSection(title = "About Me") {
                                 Text(
@@ -348,7 +343,6 @@ fun UserProfileScreen(
                             Spacer(modifier = Modifier.height(16.dp))
                         }
 
-                        // Basic Info Section
                         ProfileSection(title = "Basic Information") {
                             if (user.age != null) ProfileField(label = "Age", value = user.age.toString())
                             if (user.gender != null) ProfileField(label = "Gender", value = user.gender)
@@ -356,7 +350,6 @@ fun UserProfileScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Personal Details Section
                         ProfileSection(title = "Personal Details") {
                             if (user.gotr != null) ProfileField(label = "Gotr", value = user.gotr)
                             if (user.caste != null) ProfileField(label = "Caste", value = user.caste)
@@ -366,7 +359,6 @@ fun UserProfileScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Location Section
                         ProfileSection(title = "Location") {
                             if (user.cityTown != null) ProfileField(label = "City/Town", value = user.cityTown)
                             if (user.district != null) ProfileField(label = "District", value = user.district)
@@ -374,13 +366,13 @@ fun UserProfileScreen(
                         }
                     }
                     1 -> {
-                        // Photos Grid
                         if (user.photoUrl != null) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Card(
                                     modifier = Modifier.weight(1f).aspectRatio(1f),
                                     shape = RoundedCornerShape(8.dp),
-                                    elevation = CardDefaults.cardElevation(2.dp)
+                                    elevation = CardDefaults.cardElevation(2.dp),
+                                    onClick = { if (user.photoUrl != null) showEnlargedPhoto = true }
                                 ) {
                                     AsyncImage(
                                         model = user.photoUrl,
@@ -389,7 +381,6 @@ fun UserProfileScreen(
                                         contentScale = ContentScale.Crop
                                     )
                                 }
-                                // Placeholder for second item
                                 Spacer(modifier = Modifier.weight(1f))
                             }
                         } else {
