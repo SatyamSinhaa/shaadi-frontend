@@ -1,10 +1,15 @@
 package com.example.myapplication.ui.viewmodel
 
+import android.content.Context
+import android.net.Uri
 import android.util.Log
+import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.api.RetrofitClient
+import com.example.myapplication.data.api.SupabaseConfig
 import com.example.myapplication.data.api.WebSocketMessage
+import com.example.myapplication.data.api.PhotoUpdateRequest
 import com.example.myapplication.data.model.ChatRequest
 import com.example.myapplication.data.model.ErrorResponse
 import com.example.myapplication.data.model.Favourite
@@ -14,16 +19,19 @@ import com.example.myapplication.data.model.Notification
 import com.example.myapplication.data.model.RegisterDto
 import com.example.myapplication.data.model.Subscription
 import com.example.myapplication.data.model.User
+import io.github.jan.supabase.storage.storage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import retrofit2.Response
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 class LoginViewModel : ViewModel() {
     private val apiService = RetrofitClient.apiService
@@ -38,38 +46,27 @@ class LoginViewModel : ViewModel() {
                         is WebSocketMessage.ChatMessage -> {
                             Log.i("LoginViewModel", "🔔 WebSocket ChatMessage received: ${webSocketMessage.message.content}")
                             val currentMessages = _messages.value.toMutableList()
-                            // Check if message already exists (avoid duplicates)
                             val messageExists = currentMessages.any { it.id == webSocketMessage.message.id }
                             if (!messageExists) {
                                 currentMessages.add(webSocketMessage.message)
                                 _messages.value = currentMessages
-                                Log.i("LoginViewModel", "✅ Real-time message added to StateFlow. Total messages: ${currentMessages.size}")
-                            } else {
-                                Log.d("LoginViewModel", "⚠️ Duplicate message detected, skipping")
                             }
                         }
                         is WebSocketMessage.ChatRequestMessage -> {
-                            Log.d("LoginViewModel", "🔔 WebSocket ChatRequest received")
                             val currentRequests = _chatRequests.value.toMutableList()
-                            // Check if request already exists (avoid duplicates)
                             val requestExists = currentRequests.any { it.id == webSocketMessage.chatRequest.id }
                             if (!requestExists) {
                                 currentRequests.add(webSocketMessage.chatRequest)
                                 _chatRequests.value = currentRequests
-                                Log.d("LoginViewModel", "✅ ChatRequest added to StateFlow")
                             }
                         }
                         is WebSocketMessage.NotificationMessage -> {
-                            Log.d("LoginViewModel", "🔔 WebSocket Notification received")
                             val currentNotifications = _notifications.value.toMutableList()
-                            // Check if notification already exists (avoid duplicates)
                             val notificationExists = currentNotifications.any { it.id == webSocketMessage.notification.id }
                             if (!notificationExists) {
-                                currentNotifications.add(0, webSocketMessage.notification) // Add to beginning for latest first
+                                currentNotifications.add(0, webSocketMessage.notification)
                                 _notifications.value = currentNotifications
-                                // Update unread count
                                 _unreadNotificationCount.value = _unreadNotificationCount.value + 1
-                                Log.d("LoginViewModel", "✅ Notification added to StateFlow")
                             }
                         }
                     }
@@ -79,17 +76,13 @@ class LoginViewModel : ViewModel() {
             }
         }
 
-        // Fallback polling when WebSocket is disconnected
+        // Fallback polling monitoring
         viewModelScope.launch {
             try {
                 webSocketManager.isConnected.collect { isConnected ->
                     if (!isConnected && loginState.value is LoginState.Success) {
                         val user = (loginState.value as LoginState.Success).user
-                        Log.w("LoginViewModel", "⚠️ WebSocket disconnected, starting fallback polling for user ${user.id}")
                         startFallbackPolling(user.id)
-                    } else if (isConnected) {
-                        Log.i("LoginViewModel", "🟢 WebSocket connected, stopping fallback polling")
-                        // WebSocket is working, no need for polling
                     }
                 }
             } catch (e: Exception) {
@@ -102,13 +95,11 @@ class LoginViewModel : ViewModel() {
         viewModelScope.launch {
             while (webSocketManager.isConnected.value == false && loginState.value is LoginState.Success) {
                 try {
-                    Log.d("LoginViewModel", "🔄 Fallback polling: fetching messages for user $userId")
                     fetchMessages(userId)
                     fetchChatRequests(userId)
-                    delay(10000L) // Poll every 10 seconds
+                    delay(10000L)
                 } catch (e: Exception) {
-                    Log.e("LoginViewModel", "❌ Error during fallback polling", e)
-                    delay(30000L) // Wait longer on error
+                    delay(30000L)
                 }
             }
         }
@@ -156,13 +147,11 @@ class LoginViewModel : ViewModel() {
     private val _blockedUsers = MutableStateFlow<List<Map<String, Any>>>(emptyList())
     val blockedUsers: StateFlow<List<Map<String, Any>>> = _blockedUsers.asStateFlow()
 
-    // Expose WebSocket connection status
     val isWebSocketConnected = webSocketManager.isConnected
 
     fun login(userName: String, password: String) {
         viewModelScope.launch {
             _loginState.value = LoginState.Loading
-            // Clear previous messages when starting new login
             _messages.value = emptyList()
 
             try {
@@ -170,34 +159,112 @@ class LoginViewModel : ViewModel() {
                 if (response.isSuccessful) {
                     response.body()?.let { user ->
                         _loginState.value = LoginState.Success(user)
-                        // Connect to WebSocket for real-time messages
-                        try {
-                            webSocketManager.connect(user.id)
-                            Log.i("LoginViewModel", "WebSocket connection initiated for user ${user.id}")
-                        } catch (e: Exception) {
-                            Log.e("LoginViewModel", "Failed to connect WebSocket, will use polling", e)
-                        }
+                        webSocketManager.connect(user.id)
                         fetchSubscription(user.id)
                         fetchAllUsers()
-                    } ?: run {
-                        _loginState.value = LoginState.Error("Empty response body")
                     }
                 } else {
-                    val errorBody = response.errorBody()?.string()
-                    val errorMessage = if (errorBody != null) {
-                        try {
-                            val errorResponse = RetrofitClient.gson.fromJson(errorBody, ErrorResponse::class.java)
-                            errorResponse.error
-                        } catch (e: Exception) {
-                            "Login failed: ${response.message()}"
-                        }
-                    } else {
-                        "Login failed: ${response.message()}"
-                    }
-                    _loginState.value = LoginState.Error(errorMessage)
+                    _loginState.value = LoginState.Error("Login failed")
                 }
             } catch (e: Exception) {
                 _loginState.value = LoginState.Error("Exception: ${e.message}")
+            }
+        }
+    }
+
+    fun uploadImageAndSync(context: Context, uri: Uri, userId: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Uploading photo...", Toast.LENGTH_SHORT).show()
+                }
+                
+                // 1. Read bytes from Uri
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                if (bytes == null) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Error reading image file", Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+                
+                // 2. Upload to Supabase
+                val fileName = "profile_${userId}_${UUID.randomUUID()}.jpg"
+                val bucketName = SupabaseConfig.BUCKET_NAME
+                val bucket = SupabaseConfig.supabase.storage.from(bucketName)
+                
+                bucket.upload(fileName, bytes)
+
+                // 3. Construct Public URL
+                val encodedBucketName = bucketName.replace(" ", "%20")
+                val publicUrl = "https://${SupabaseConfig.PROJECT_ID}.supabase.co/storage/v1/object/public/$encodedBucketName/$fileName"
+
+                // 4. Sync with backend
+                val response = apiService.updateProfilePhoto(userId, PhotoUpdateRequest(userId, publicUrl))
+                
+                if (response.isSuccessful) {
+                    val currentState = _loginState.value
+                    if (currentState is LoginState.Success && currentState.user.id == userId) {
+                        _loginState.value = LoginState.Success(currentState.user.copy(photoUrl = publicUrl))
+                    }
+                    
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Profile photo updated!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("Upload", "Error during upload/sync: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Upload failed: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    fun uploadGalleryPhoto(context: Context, uri: Uri, userId: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Adding to gallery...", Toast.LENGTH_SHORT).show()
+                }
+                
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                if (bytes == null) return@launch
+                
+                val fileName = "gallery_${userId}_${UUID.randomUUID()}.jpg"
+                val bucketName = SupabaseConfig.BUCKET_NAME
+                val bucket = SupabaseConfig.supabase.storage.from(bucketName)
+                
+                bucket.upload(fileName, bytes)
+
+                val encodedBucketName = bucketName.replace(" ", "%20")
+                val publicUrl = "https://${SupabaseConfig.PROJECT_ID}.supabase.co/storage/v1/object/public/$encodedBucketName/$fileName"
+
+                val response = apiService.addPhotoToGallery(userId, mapOf("photoUrl" to publicUrl))
+                
+                if (response.isSuccessful) {
+                     // We need to refetch the full user object to get the updated photos list,
+                     // BUT we must NOT use fetchUserById as it triggers navigation by setting _selectedUser.
+                     // Instead, we call the API directly and update _loginState.
+                     val userResponse = apiService.getUserById(userId)
+                     if (userResponse.isSuccessful) {
+                         userResponse.body()?.let { updatedUser ->
+                             val currentState = _loginState.value
+                             if (currentState is LoginState.Success && currentState.user.id == userId) {
+                                 _loginState.value = LoginState.Success(updatedUser)
+                             }
+                         }
+                     }
+                     
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Photo added to gallery!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("Upload", "Gallery upload failed", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Gallery upload failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -208,8 +275,6 @@ class LoginViewModel : ViewModel() {
                 val response = apiService.getSubscription(userId)
                 if (response.isSuccessful) {
                     _subscription.value = response.body()
-                } else {
-                    _subscription.value = null
                 }
             } catch (e: Exception) {
                 _subscription.value = null
@@ -223,55 +288,35 @@ class LoginViewModel : ViewModel() {
                 val response: Response<User> = apiService.updateUser(user.id, user)
                 if (response.isSuccessful) {
                     response.body()?.let { updatedUser ->
-                        // Update the login state with the updated user
                         _loginState.value = LoginState.Success(updatedUser)
                     }
-                } else {
-                    // Handle error for updateUser if needed
                 }
-            } catch (e: Exception) {
-                // Handle error if needed
-            }
+            } catch (e: Exception) {}
         }
     }
 
     fun logout() {
-        // Disconnect WebSocket before clearing state
         webSocketManager.disconnect()
-
         _loginState.value = LoginState.Idle
         _users.value = emptyList()
-        _favourites.value = emptyList()
-        _selectedUser.value = null
-        _chatTargetUser.value = null
         _messages.value = emptyList()
-        _sendMessageError.value = null
         _subscription.value = null
-        _chatRequests.value = emptyList()
-        _notifications.value = emptyList()
-        _unreadNotificationCount.value = 0
-        _blockedUsers.value = emptyList()
     }
 
     fun fetchAllUsers() {
         val currentUser = (loginState.value as? LoginState.Success)?.user
-        val currentUserGender = currentUser?.gender
-        val currentUserId = currentUser?.id
-
-        val oppositeGender = when (currentUserGender?.lowercase()) {
+        val oppositeGender = when (currentUser?.gender?.lowercase()) {
             "male" -> "Female"
             "female" -> "Male"
             else -> null
         }
         viewModelScope.launch {
             try {
-                val response: Response<List<User>> = apiService.getAllUsers(oppositeGender, currentUserId)
+                val response: Response<List<User>> = apiService.getAllUsers(oppositeGender, currentUser?.id)
                 if (response.isSuccessful) {
                     response.body()?.let { _users.value = it }
                 }
-            } catch (e: Exception) {
-                // Handle error
-            }
+            } catch (e: Exception) {}
         }
     }
 
@@ -282,9 +327,7 @@ class LoginViewModel : ViewModel() {
                 if (response.isSuccessful) {
                     response.body()?.let { _favourites.value = it }
                 }
-            } catch (e: Exception) {
-                // Handle error
-            }
+            } catch (e: Exception) {}
         }
     }
 
@@ -292,12 +335,8 @@ class LoginViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val response: Response<Unit> = apiService.addFavourite(userId, favouritedUserId)
-                if (response.isSuccessful) {
-                    fetchFavourites(userId)
-                }
-            } catch (e: Exception) {
-                // Handle error
-            }
+                if (response.isSuccessful) fetchFavourites(userId)
+            } catch (e: Exception) {}
         }
     }
 
@@ -305,12 +344,8 @@ class LoginViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val response: Response<Unit> = apiService.removeFavourite(userId, favouritedUserId)
-                if (response.isSuccessful) {
-                    fetchFavourites(userId)
-                }
-            } catch (e: Exception) {
-                // Handle error
-            }
+                if (response.isSuccessful) fetchFavourites(userId)
+            } catch (e: Exception) {}
         }
     }
 
@@ -320,12 +355,9 @@ class LoginViewModel : ViewModel() {
             try {
                 val response = apiService.getUserById(userId)
                 if (response.isSuccessful) {
-                    response.body()?.let { user ->
-                        _selectedUser.value = user
-                    }
+                    response.body()?.let { _selectedUser.value = it }
                 }
             } catch (e: Exception) {
-                // Handle error
             } finally {
                 _userProfileLoading.value = false
             }
@@ -347,9 +379,7 @@ class LoginViewModel : ViewModel() {
                 if (response.isSuccessful) {
                     response.body()?.let { _messages.value = it }
                 }
-            } catch (e: Exception) {
-                // Handle error
-            }
+            } catch (e: Exception) {}
         }
     }
 
@@ -360,9 +390,7 @@ class LoginViewModel : ViewModel() {
                 if (response.isSuccessful) {
                     response.body()?.let { _chatRequests.value = it }
                 }
-            } catch (e: Exception) {
-                // Handle error
-            }
+            } catch (e: Exception) {}
         }
     }
 
@@ -374,9 +402,7 @@ class LoginViewModel : ViewModel() {
                     fetchChatRequests(userId)
                     onSuccess()
                 }
-            } catch (e: Exception) {
-                // Handle error
-            }
+            } catch (e: Exception) {}
         }
     }
 
@@ -384,12 +410,8 @@ class LoginViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val response = apiService.rejectChatRequest(requestId, mapOf("userId" to userId))
-                if (response.isSuccessful) {
-                    fetchChatRequests(userId)
-                }
-            } catch (e: Exception) {
-                // Handle error
-            }
+                if (response.isSuccessful) fetchChatRequests(userId)
+            } catch (e: Exception) {}
         }
     }
 
@@ -398,30 +420,14 @@ class LoginViewModel : ViewModel() {
             try {
                 val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
                 val currentTimestamp = dateFormat.format(Date())
-
                 val message = Message(sender = sender, receiver = receiver, content = content, sentAt = currentTimestamp)
                 val response: Response<Message> = apiService.sendMessage(message)
-                if (response.isSuccessful) {
-                    Log.d("LoginViewModel", "✅ Message sent successfully")
-                    // Fetch messages as fallback to ensure sender sees their message
-                    // WebSocket should deliver to receiver in real-time
-                    fetchMessages(sender.id)
-                } else {
+                if (!response.isSuccessful) {
                     val errorBody = response.errorBody()?.string()
-                    val errorMessage = if (errorBody != null) {
-                        try {
-                            val errorResponse = RetrofitClient.gson.fromJson(errorBody, ErrorResponse::class.java)
-                            errorResponse.error
-                        } catch (e: Exception) {
-                            "Failed to send message: ${response.message()}"
-                        }
-                    } else {
-                        "Failed to send message: ${response.message()}"
-                    }
-                    _sendMessageError.value = errorMessage
+                    _sendMessageError.value = "Failed: $errorBody"
                 }
             } catch (e: Exception) {
-                _sendMessageError.value = "Failed to send message: ${e.localizedMessage ?: "Unknown error"}"
+                _sendMessageError.value = "Error: ${e.message}"
             }
         }
     }
@@ -432,35 +438,16 @@ class LoginViewModel : ViewModel() {
 
     fun register(name: String, email: String, password: String, gender: String) {
         _registerState.value = LoginState.Loading
-
         viewModelScope.launch {
             try {
-                val registerDto = RegisterDto(email, password, name, gender)
-                val response: Response<User> = apiService.register(registerDto)
-
+                val response: Response<User> = apiService.register(RegisterDto(email, password, name, gender))
                 if (response.isSuccessful) {
-                    val user = response.body()
-                    if (user != null) {
-                        _registerState.value = LoginState.Success(user)
-                    } else {
-                        _registerState.value = LoginState.Error("Registration failed: No user data")
-                    }
+                    response.body()?.let { _registerState.value = LoginState.Success(it) }
                 } else {
-                    val errorBody = response.errorBody()?.string()
-                    val errorMessage = if (errorBody != null) {
-                        try {
-                            val errorResponse = RetrofitClient.gson.fromJson(errorBody, ErrorResponse::class.java)
-                            errorResponse.error
-                        } catch (e: Exception) {
-                            "Registration failed: ${response.message()}"
-                        }
-                    } else {
-                        "Registration failed: ${response.message()}"
-                    }
-                    _registerState.value = LoginState.Error(errorMessage)
+                    _registerState.value = LoginState.Error("Registration failed")
                 }
             } catch (e: Exception) {
-                _registerState.value = LoginState.Error("Registration failed: ${e.localizedMessage ?: "Unknown error"}")
+                _registerState.value = LoginState.Error(e.message ?: "Unknown error")
             }
         }
     }
@@ -473,13 +460,8 @@ class LoginViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val response = apiService.markMessagesAsRead(receiverId, senderId)
-                if (response.isSuccessful) {
-                    // Refresh messages after marking as read
-                    fetchMessages(receiverId)
-                }
-            } catch (e: Exception) {
-                // Handle error if needed
-            }
+                if (response.isSuccessful) fetchMessages(receiverId)
+            } catch (e: Exception) {}
         }
     }
 
@@ -490,9 +472,7 @@ class LoginViewModel : ViewModel() {
                 if (response.isSuccessful) {
                     response.body()?.let { _notifications.value = it }
                 }
-            } catch (e: Exception) {
-                // Handle error
-            }
+            } catch (e: Exception) {}
         }
     }
 
@@ -501,13 +481,9 @@ class LoginViewModel : ViewModel() {
             try {
                 val response: Response<Map<String, Long>> = apiService.getUnreadNotificationCount(userId)
                 if (response.isSuccessful) {
-                    response.body()?.let { map ->
-                        _unreadNotificationCount.value = map["count"]?.toInt() ?: 0
-                    }
+                    response.body()?.let { _unreadNotificationCount.value = it["count"]?.toInt() ?: 0 }
                 }
-            } catch (e: Exception) {
-                // Handle error
-            }
+            } catch (e: Exception) {}
         }
     }
 
@@ -516,13 +492,10 @@ class LoginViewModel : ViewModel() {
             try {
                 val response = apiService.markNotificationAsRead(notificationId, mapOf("userId" to userId))
                 if (response.isSuccessful) {
-                    // Refresh notifications and unread count after marking as read
                     fetchNotifications(userId)
                     fetchUnreadNotificationCount(userId)
                 }
-            } catch (e: Exception) {
-                // Handle error if needed
-            }
+            } catch (e: Exception) {}
         }
     }
 
@@ -531,32 +504,10 @@ class LoginViewModel : ViewModel() {
             try {
                 val response = apiService.markAllNotificationsAsRead(userId)
                 if (response.isSuccessful) {
-                    // Refresh notifications and unread count after marking all as read
                     fetchNotifications(userId)
                     fetchUnreadNotificationCount(userId)
                 }
-            } catch (e: Exception) {
-                // Handle error if needed
-            }
-        }
-    }
-
-    fun getChatRequestStatus(currentUserId: Int, otherUserId: Int): String? {
-        // Check if there's a pending request between these users
-        val pendingRequests = chatRequests.value
-        return pendingRequests.find { request ->
-            (request.sender.id == currentUserId && request.receiver.id == otherUserId) ||
-            (request.sender.id == otherUserId && request.receiver.id == currentUserId)
-        }?.status
-    }
-
-    fun canChatWithUser(currentUserId: Int, otherUserId: Int): Boolean {
-        // Check if there's an accepted request between these users
-        val pendingRequests = chatRequests.value
-        return pendingRequests.any { request ->
-            ((request.sender.id == currentUserId && request.receiver.id == otherUserId) ||
-             (request.sender.id == otherUserId && request.receiver.id == currentUserId)) &&
-            request.status == "ACCEPTED"
+            } catch (e: Exception) {}
         }
     }
 
@@ -564,40 +515,17 @@ class LoginViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val response = apiService.cancelChatRequest(requestId, userId)
-                if (response.isSuccessful) {
-                    fetchChatRequests(userId)
-                    // Also refresh notifications to remove the canceled request notification
-                    fetchNotifications(userId)
-                    fetchUnreadNotificationCount(userId)
-                }
-            } catch (e: Exception) {
-                // Handle error
-            }
+                if (response.isSuccessful) fetchChatRequests(userId)
+            } catch (e: Exception) {}
         }
-    }
-
-    fun getChatRequestId(currentUserId: Int, otherUserId: Int): Int? {
-        // Find the request ID between these users
-        val pendingRequests = chatRequests.value
-        return pendingRequests.find { request ->
-            (request.sender.id == currentUserId && request.receiver.id == otherUserId) ||
-            (request.sender.id == otherUserId && request.receiver.id == currentUserId)
-        }?.id
     }
 
     fun sendChatRequest(senderId: Int, receiverId: Int) {
         viewModelScope.launch {
             try {
                 val response = apiService.sendChatRequest(mapOf("senderId" to senderId, "receiverId" to receiverId))
-                if (response.isSuccessful) {
-                    fetchChatRequests(senderId)
-                    // Also refresh notifications to show the new sent request notification
-                    fetchNotifications(senderId)
-                    fetchUnreadNotificationCount(senderId)
-                }
-            } catch (e: Exception) {
-                // Handle error - could add error state here if needed
-            }
+                if (response.isSuccessful) fetchChatRequests(senderId)
+            } catch (e: Exception) {}
         }
     }
 
@@ -606,19 +534,13 @@ class LoginViewModel : ViewModel() {
             try {
                 val response = apiService.blockUser(blockerId, blockedId)
                 if (response.isSuccessful) {
-                    // Refresh users list to remove blocked user
                     fetchAllUsers()
-                    // Refresh favourites to remove blocked users
                     fetchFavourites(blockerId)
-                    // Refresh chat requests to remove blocked users
                     fetchChatRequests(blockerId)
-                    // Refresh messages to remove blocked users
                     fetchMessages(blockerId)
                     onSuccess()
                 }
-            } catch (e: Exception) {
-                // Handle error if needed
-            }
+            } catch (e: Exception) {}
         }
     }
 
@@ -627,19 +549,13 @@ class LoginViewModel : ViewModel() {
             try {
                 val response = apiService.unblockUser(blockerId, blockedId)
                 if (response.isSuccessful) {
-                    // Refresh users list to show unblocked user
                     fetchAllUsers()
-                    // Refresh favourites to show unblocked users
                     fetchFavourites(blockerId)
-                    // Refresh chat requests to show unblocked users
                     fetchChatRequests(blockerId)
-                    // Refresh messages to show unblocked users
                     fetchMessages(blockerId)
                     onSuccess()
                 }
-            } catch (e: Exception) {
-                // Handle error if needed
-            }
+            } catch (e: Exception) {}
         }
     }
 
@@ -650,18 +566,7 @@ class LoginViewModel : ViewModel() {
                 if (response.isSuccessful) {
                     response.body()?.let { _blockedUsers.value = it }
                 }
-            } catch (e: Exception) {
-                // Handle error
-            }
-        }
-    }
-
-    fun isUserBlocked(currentUserId: Int, otherUserId: Int): Boolean {
-        // Check if the other user is in the blocked users list
-        return blockedUsers.value.any { block ->
-            val blocked = block["blocked"] as? Map<*, *>
-            val blockedId = blocked?.get("id") as? Double
-            blockedId?.toInt() == otherUserId
+            } catch (e: Exception) {}
         }
     }
 }

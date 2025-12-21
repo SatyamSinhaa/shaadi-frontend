@@ -81,6 +81,12 @@ interface ApiService {
     @GET("api/users/{id}")
     suspend fun getUserById(@Path("id") id: Int): Response<User>
 
+    @POST("api/users/{userId}/photo")
+    suspend fun updateProfilePhoto(@Path("userId") userId: Int, @Body body: PhotoUpdateRequest): Response<Unit>
+
+    @POST("api/users/{userId}/gallery")
+    suspend fun addPhotoToGallery(@Path("userId") userId: Int, @Body body: Map<String, String>): Response<Unit>
+
     @GET("api/plans")
     suspend fun getAllPlans(): Response<List<Plan>>
 
@@ -117,3 +123,8 @@ interface ApiService {
     @GET("api/users/{blockerId}/blocked")
     suspend fun getBlockedUsers(@Path("blockerId") blockerId: Int): Response<List<Map<String, Any>>>
 }
+
+data class PhotoUpdateRequest(
+    val userId: Int,
+    val photoUrl: String
+)

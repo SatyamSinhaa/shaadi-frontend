@@ -1,5 +1,11 @@
 package com.example.myapplication.ui.screen
 
+import android.content.Context
+import android.net.Uri
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,6 +24,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,10 +33,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.yalantis.ucrop.UCrop
+import android.content.Intent
+import androidx.activity.result.ActivityResult
+
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.myapplication.data.model.User
@@ -75,7 +87,8 @@ fun ProfileScreen(
                         viewModel.updateUser(updatedUser)
                         currentEditSection = EditSection.NONE
                     },
-                    onCancel = { currentEditSection = EditSection.NONE }
+                    onCancel = { currentEditSection = EditSection.NONE },
+                    viewModel = viewModel
                 )
             } else {
                 ProfileView(
@@ -84,7 +97,8 @@ fun ProfileScreen(
                     subscription = subscription,
                     onEditSection = { section -> currentEditSection = section },
                     onLogout = { viewModel.logout() },
-                    onPhotoClick = { if (user.photoUrl != null) showEnlargedPhoto = true }
+                    onPhotoClick = { if (user.photoUrl != null) showEnlargedPhoto = true },
+                    onAddGalleryPhoto = { uri, context -> viewModel.uploadGalleryPhoto(context, uri, user.id) }
                 )
             }
         }
@@ -143,7 +157,8 @@ fun ProfileView(
     subscription: com.example.myapplication.data.model.Subscription? = null,
     onEditSection: (EditSection) -> Unit,
     onLogout: () -> Unit,
-    onPhotoClick: () -> Unit = {}
+    onPhotoClick: () -> Unit = {},
+    onAddGalleryPhoto: (Uri, Context) -> Unit
 ) {
     // State for tab selection
     var selectedTabIndex by remember { mutableStateOf(0) }
@@ -326,43 +341,80 @@ fun ProfileView(
                     }
                 }
                 1 -> {
-                   // Photos Tab
-                   Column(modifier = Modifier.fillMaxSize()) {
-                       // Add Photo Button
-                       Button(
-                           onClick = { /* Add Photo Logic */ },
-                           modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-                       ) {
-                           Icon(Icons.Filled.Add, contentDescription = "Add Photo")
-                           Spacer(modifier = Modifier.width(8.dp))
-                           Text("Add Photo")
-                       }
+                    // Photos Tab
+                    val context = LocalContext.current
+                    
+                    // Gallery Launcher
+                    val galleryLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.PickVisualMedia()
+                    ) { uri: Uri? ->
+                        uri?.let {
+                            onAddGalleryPhoto(it, context)
+                        }
+                    }
 
-                       // Photos Grid (Placeholder for now as user only has one photoUrl)
-                       if (user.photoUrl != null) {
-                           Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                               Card(
-                                   modifier = Modifier.weight(1f).aspectRatio(1f),
-                                   shape = RoundedCornerShape(8.dp),
-                                   elevation = CardDefaults.cardElevation(2.dp),
-                                   onClick = { onPhotoClick() } // Enlarge photo on click from grid as well
-                               ) {
-                                   AsyncImage(
-                                       model = user.photoUrl,
-                                       contentDescription = "Photo",
-                                       modifier = Modifier.fillMaxSize(),
-                                       contentScale = ContentScale.Crop
-                                   )
-                               }
-                               // Placeholder for second item in row if needed
-                               Spacer(modifier = Modifier.weight(1f)) 
-                           }
-                       } else {
-                           Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                               Text("No Photos Yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                           }
-                       }
-                   }
+                    // Gallery Launcher
+
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // Add Photo Button
+                        Button(
+                            onClick = { 
+                                galleryLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = "Add Photo")
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Add Photo")
+                        }
+
+                        // Photos Grid
+                        if (user.photos.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                                Text("No Additional Photos", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        } else {
+                            // Simple Grid Implementation
+                            val photos = user.photos
+                            val chunks = photos.chunked(3) // 3 columns
+                            
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                chunks.forEach { rowPhotos ->
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        rowPhotos.forEach { photo ->
+                                            var showDialog by remember { mutableStateOf(false) }
+                                            
+                                            // Photo Item
+                                            Box(modifier = Modifier.weight(1f).aspectRatio(1f)) {
+                                                 AsyncImage(
+                                                    model = photo.url,
+                                                    contentDescription = "Gallery Photo",
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .clickable { showDialog = true },
+                                                    contentScale = ContentScale.Crop
+                                                )
+                                            }
+                                            
+                                            if (showDialog) {
+                                                EnlargedPhotoDialog(
+                                                    photoUrl = photo.url,
+                                                    onDismiss = { showDialog = false }
+                                                )
+                                            }
+                                        }
+                                        // Fill empty spaces if last row has fewer items
+                                        repeat(3 - rowPhotos.size) {
+                                            Spacer(modifier = Modifier.weight(1f))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -447,8 +499,52 @@ fun SectionEditForm(
     user: User,
     section: EditSection,
     onSave: (User) -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    viewModel: LoginViewModel = viewModel()
 ) {
+    val context = LocalContext.current
+    
+    // Photo Picker Launcher
+    // Crop Launcher
+    val cropLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val resultUri = UCrop.getOutput(result.data!!)
+            resultUri?.let {
+                viewModel.uploadImageAndSync(context, it, user.id)
+            }
+        } else if (result.resultCode == UCrop.RESULT_ERROR) {
+            val cropError = UCrop.getError(result.data!!)
+            Log.e("SectionEditForm", "Crop error: $cropError")
+        }
+    }
+
+    // Photo Picker Launcher
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        uri?.let { sourceUri ->
+             // Create destination URI in cache
+            val destinationFileName = "profile_crop_${System.currentTimeMillis()}.jpg"
+            val destinationFile = java.io.File(context.cacheDir, destinationFileName)
+            val destinationUri = android.net.Uri.fromFile(destinationFile)
+
+            val uCrop = UCrop.of(sourceUri, destinationUri)
+                .withAspectRatio(1f, 1f) // Profile pictures are usually square
+                .withMaxResultSize(1080, 1080)
+                .withOptions(UCrop.Options().apply {
+                    setCompressionQuality(80)
+                    setFreeStyleCropEnabled(true)
+                    setCircleDimmedLayer(true) // Circular crop for profile photo
+                    setShowCropGrid(false) // Cleaner look for profile
+                })
+            
+            val intent = uCrop.getIntent(context)
+            cropLauncher.launch(intent)
+        }
+    }
+
     // Local state for all fields, we'll only show relevant ones based on section
     var name by remember { mutableStateOf(user.name) }
     var photoUrl by remember { mutableStateOf(user.photoUrl ?: "") }
@@ -475,7 +571,7 @@ fun SectionEditForm(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            text = "Edit ${section.name.replace("_", " ").lowercase().capitalize(java.util.Locale.ROOT)}",
+            text = "Edit ${section.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }}",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 16.dp)
@@ -489,12 +585,66 @@ fun SectionEditForm(
                     label = { Text("Name") },
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = photoUrl,
-                    onValueChange = { photoUrl = it },
-                    label = { Text("Photo URL") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Photo Section with Picker
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Profile Photo", style = MaterialTheme.typography.titleMedium)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        // Current Photo Preview
+                        Box(
+                            modifier = Modifier
+                                .size(120.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surface),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (user.photoUrl != null) {
+                                AsyncImage(
+                                    model = user.photoUrl,
+                                    contentDescription = "Current Photo",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Icon(Icons.Filled.Person, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Button(
+                            onClick = {
+                                launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Select from Gallery")
+                        }
+                        
+                        Text(
+                            text = "Or enter URL manually:",
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                        
+                        OutlinedTextField(
+                            value = photoUrl,
+                            onValueChange = { photoUrl = it },
+                            label = { Text("Photo URL") },
+                            modifier = Modifier.fillMaxWidth(),
+                            textStyle = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
             }
             EditSection.BASIC_INFO -> {
                 OutlinedTextField(

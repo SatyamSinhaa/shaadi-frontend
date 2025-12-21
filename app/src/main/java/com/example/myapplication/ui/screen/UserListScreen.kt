@@ -90,27 +90,19 @@ fun UserListScreen(
                 val isFavourite = favourites.any { it.favouritedUser.id == targetUser.id }
                 
                 // Determine chat status
-                val requestStatus = if (currentUserId != null) {
-                    viewModel.getChatRequestStatus(currentUserId, targetUser.id)
+                val currentRequest = if (currentUserId != null) {
+                    chatRequests.find { 
+                        (it.sender.id == currentUserId && it.receiver.id == targetUser.id) ||
+                        (it.sender.id == targetUser.id && it.receiver.id == currentUserId)
+                    }
                 } else null
+                val requestStatus = currentRequest?.status
                 
                 // Check if we are the sender of a pending request
-                val isPendingSender = if (currentUserId != null) {
-                     chatRequests.any { 
-                        it.sender.id == currentUserId && 
-                        it.receiver.id == targetUser.id && 
-                        it.status == "PENDING" 
-                    }
-                } else false
+                val isPendingSender = currentRequest?.sender?.id == currentUserId && requestStatus == "PENDING"
 
                 // Check if we are the receiver of a pending request (Incoming)
-                val isPendingReceiver = if (currentUserId != null) {
-                     chatRequests.any { 
-                        it.receiver.id == currentUserId && 
-                        it.sender.id == targetUser.id && 
-                        it.status == "PENDING" 
-                    }
-                } else false
+                val isPendingReceiver = currentRequest?.receiver?.id == currentUserId && requestStatus == "PENDING"
 
                 FullPageUserItem(
                     user = targetUser,
@@ -127,13 +119,13 @@ fun UserListScreen(
                                     onChatClick(targetUser)
                                 } else if (isPendingSender) {
                                     // Cancel Request
-                                    val requestId = viewModel.getChatRequestId(currentUserId ?: 0, targetUser.id)
+                                    val requestId = currentRequest?.id
                                     if (requestId != null) {
                                         viewModel.cancelChatRequest(requestId, currentUserId ?: 0)
                                     }
                                 } else if (isPendingReceiver) {
                                     // Accept Request
-                                    val requestId = viewModel.getChatRequestId(currentUserId ?: 0, targetUser.id)
+                                    val requestId = currentRequest?.id
                                     if (requestId != null) {
                                         viewModel.acceptChatRequest(requestId, currentUserId ?: 0) {
                                             // Optional: Handle success if needed (UI updates automatically)

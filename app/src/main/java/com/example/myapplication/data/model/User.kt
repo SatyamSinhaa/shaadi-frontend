@@ -16,5 +16,6 @@ data class User(
     val state: String?,
     val bio: String?,
     val photoUrl: String?,
-    val freeChatLimit: Int
+    val freeChatLimit: Int,
+    val photos: List<Photo> = emptyList()
 )
