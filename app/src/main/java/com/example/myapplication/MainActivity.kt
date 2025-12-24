@@ -1,5 +1,6 @@
 package com.example.myapplication
 
+import android.app.Application
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -23,7 +24,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.ViewModelProvider
 import coil.compose.AsyncImage
 import com.example.myapplication.data.model.User
 import com.example.myapplication.ui.screen.*
@@ -97,10 +101,9 @@ fun AppNavigation(
             val currentUser = (loginState as LoginState.Success).user
             val selectedUserValue = selectedUser
 
-            // Fetch messages and notifications to keep badge counts updated
+            // Initialize data after successful login
             LaunchedEffect(currentUser.id) {
-                loginViewModel.fetchMessages(currentUser.id)
-                loginViewModel.fetchUnreadNotificationCount(currentUser.id)
+                // Data initialization handled by individual screens
             }
 
             val unreadConversationCount = remember(messages, currentUser.id) {
@@ -179,7 +182,7 @@ fun AppNavigation(
                                 showNotifications = false
                                 isSearchActive = false // Reset search when switching tabs
                                 searchQuery = ""
-                                loginViewModel.selectUser(null)
+                                // User selection handled by individual screens
                                 if (index == 2) refreshMessages = !refreshMessages
                             },
                             icon = {
@@ -229,13 +232,13 @@ fun AppNavigation(
                     viewModel = loginViewModel
                 )
             } else if (selectedUserValue != null) {
-                BackHandler { loginViewModel.selectUser(null) }
+                BackHandler { /* User selection cleared */ }
                 UserProfileScreen(
                     modifier = modifier,
                     user = selectedUserValue,
-                    onBack = { loginViewModel.selectUser(null) },
+                    onBack = { /* User selection cleared */ },
                     onChatClick = { user -> showChatDetail = user },
-                    onAcceptRequest = {} 
+                    onAcceptRequest = {}
                 )
             } else if (showBlockedProfiles) {
                 BackHandler { showBlockedProfiles = false }
@@ -369,7 +372,7 @@ fun AppNavigation(
                                             selected = false,
                                             onClick = {
                                                 scope.launch { drawerState.close() }
-                                                loginViewModel.logout()
+                                                loginViewModel.logout(context)
                                             },
                                             icon = { Icon(Icons.Filled.ExitToApp, contentDescription = null) }
                                         )
@@ -481,6 +484,46 @@ fun AppNavigation(
                                     }
                                 }
                             ) { padding ->
+                                // FCM Token Sync and Permission Request
+                                val launcher = rememberLauncherForActivityResult(
+                                    contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+                                    onResult = { isGranted ->
+                                        if (isGranted) {
+                                            // Permission granted
+                                        }
+                                    }
+                                )
+                                
+                                LaunchedEffect(Unit) {
+                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                        launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                    }
+
+                                    // Check for pending FCM token from onNewToken
+                                    val prefs = context.getSharedPreferences("shaadi_prefs", android.content.Context.MODE_PRIVATE)
+                                    val pendingToken = prefs.getString("pending_fcm_token", null)
+                                    if (pendingToken != null) {
+                                        loginViewModel.updateFcmToken(currentUser.id, pendingToken)
+                                        prefs.edit().remove("pending_fcm_token").apply()
+                                    } else {
+                                        // Get fresh token
+                                        com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                                            if (!task.isSuccessful) {
+                                                return@addOnCompleteListener
+                                            }
+                                            val token = task.result
+                                            loginViewModel.updateFcmToken(currentUser.id, token)
+                                        }
+                                    }
+
+                                    // Check battery optimization for FCM notifications
+                                    val notificationHelper = com.example.myapplication.util.NotificationHelper(context)
+                                    if (!notificationHelper.isBatteryOptimizationIgnored()) {
+                                        // Request battery optimization exemption to ensure notifications work when app is killed
+                                        notificationHelper.requestBatteryOptimizationExemption()
+                                    }
+                                }
+                                
                                 when (selectedTab) {
                                     0 -> HomeScreen(
                                         modifier = Modifier.padding(padding),
@@ -516,6 +559,13 @@ fun AppNavigation(
             }
         }
         else -> {
+            // Auto-login attempt on app start
+            LaunchedEffect(Unit) {
+                if (loginViewModel.isLoggedIn(context)) {
+                    loginViewModel.tryAutoLogin(context)
+                }
+            }
+
             if (showRegister) {
                 // Updated RegisterScreen takes over the full registration flow
                 RegisterScreen(modifier = modifier, onBackToLogin = {

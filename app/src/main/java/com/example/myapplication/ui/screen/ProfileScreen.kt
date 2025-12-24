@@ -66,6 +66,7 @@ fun ProfileScreen(
     val subscription by viewModel.subscription.collectAsState()
     var currentEditSection by remember { mutableStateOf(EditSection.NONE) }
     var showEnlargedPhoto by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     when (loginState) {
         is LoginState.Success -> {
@@ -96,7 +97,7 @@ fun ProfileScreen(
                     user = user,
                     subscription = subscription,
                     onEditSection = { section -> currentEditSection = section },
-                    onLogout = { viewModel.logout() },
+                    onLogout = { viewModel.logout(context) },
                     onPhotoClick = { if (user.photoUrl != null) showEnlargedPhoto = true },
                     onAddGalleryPhoto = { uri, context -> viewModel.uploadGalleryPhoto(context, uri, user.id) }
                 )

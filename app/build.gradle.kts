@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("org.jetbrains.kotlin.plugin.serialization")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -62,6 +63,10 @@ dependencies {
     implementation("io.github.jan-tennert.supabase:storage-kt:3.0.1")
     implementation("io.ktor:ktor-client-okhttp:3.0.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+
+    // Firebase
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging-ktx")
 
     // RxJava for STOMP WebSocket client
     implementation("io.reactivex.rxjava2:rxjava:2.2.21")
