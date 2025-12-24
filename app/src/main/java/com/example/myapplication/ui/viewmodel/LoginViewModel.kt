@@ -1,6 +1,7 @@
 package com.example.myapplication.ui.viewmodel
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
@@ -36,6 +37,14 @@ import java.util.UUID
 class LoginViewModel : ViewModel() {
     private val apiService = RetrofitClient.apiService
     private val webSocketManager = RetrofitClient.webSocketManager
+
+    companion object {
+        private const val PREFS_NAME = "shaadi_prefs"
+        private const val KEY_USER_EMAIL = "user_email"
+        private const val KEY_USER_PASSWORD = "user_password"
+        private const val KEY_USER_ID = "user_id"
+        private const val KEY_IS_LOGGED_IN = "is_logged_in"
+    }
 
     init {
         // Collect WebSocket messages and update appropriate states
@@ -149,7 +158,7 @@ class LoginViewModel : ViewModel() {
 
     val isWebSocketConnected = webSocketManager.isConnected
 
-    fun login(userName: String, password: String) {
+    fun login(context: Context, userName: String, password: String, rememberMe: Boolean = true) {
         viewModelScope.launch {
             _loginState.value = LoginState.Loading
             _messages.value = emptyList()
@@ -159,6 +168,8 @@ class LoginViewModel : ViewModel() {
                 if (response.isSuccessful) {
                     response.body()?.let { user ->
                         _loginState.value = LoginState.Success(user)
+                        saveLoginCredentials(context, userName, password)
+                        saveUserId(context, user.id)
                         webSocketManager.connect(user.id)
                         fetchSubscription(user.id)
                         fetchAllUsers()
@@ -172,6 +183,11 @@ class LoginViewModel : ViewModel() {
         }
     }
 
+    private fun saveUserId(context: Context, userId: Int) {
+        val prefs = getSharedPreferences(context)
+        prefs.edit().putInt(KEY_USER_ID, userId).apply()
+    }
+
     fun uploadImageAndSync(context: Context, uri: Uri, userId: Int) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -179,7 +195,6 @@ class LoginViewModel : ViewModel() {
                     Toast.makeText(context, "Uploading photo...", Toast.LENGTH_SHORT).show()
                 }
                 
-                // 1. Read bytes from Uri
                 val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                 if (bytes == null) {
                     withContext(Dispatchers.Main) {
@@ -188,24 +203,27 @@ class LoginViewModel : ViewModel() {
                     return@launch
                 }
                 
-                // 2. Upload to Supabase
                 val fileName = "profile_${userId}_${UUID.randomUUID()}.jpg"
                 val bucketName = SupabaseConfig.BUCKET_NAME
                 val bucket = SupabaseConfig.supabase.storage.from(bucketName)
                 
                 bucket.upload(fileName, bytes)
 
-                // 3. Construct Public URL
                 val encodedBucketName = bucketName.replace(" ", "%20")
                 val publicUrl = "https://${SupabaseConfig.PROJECT_ID}.supabase.co/storage/v1/object/public/$encodedBucketName/$fileName"
 
-                // 4. Sync with backend
                 val response = apiService.updateProfilePhoto(userId, PhotoUpdateRequest(userId, publicUrl))
                 
                 if (response.isSuccessful) {
-                    val currentState = _loginState.value
-                    if (currentState is LoginState.Success && currentState.user.id == userId) {
-                        _loginState.value = LoginState.Success(currentState.user.copy(photoUrl = publicUrl))
+                    // Refetch user by ID to trigger navigation correctly if needed
+                    val userResponse = apiService.getUserById(userId)
+                    if (userResponse.isSuccessful) {
+                        userResponse.body()?.let { updatedUser ->
+                            val currentState = _loginState.value
+                            if (currentState is LoginState.Success && currentState.user.id == userId) {
+                                _loginState.value = LoginState.Success(updatedUser)
+                            }
+                        }
                     }
                     
                     withContext(Dispatchers.Main) {
@@ -243,9 +261,6 @@ class LoginViewModel : ViewModel() {
                 val response = apiService.addPhotoToGallery(userId, mapOf("photoUrl" to publicUrl))
                 
                 if (response.isSuccessful) {
-                     // We need to refetch the full user object to get the updated photos list,
-                     // BUT we must NOT use fetchUserById as it triggers navigation by setting _selectedUser.
-                     // Instead, we call the API directly and update _loginState.
                      val userResponse = apiService.getUserById(userId)
                      if (userResponse.isSuccessful) {
                          userResponse.body()?.let { updatedUser ->
@@ -295,12 +310,71 @@ class LoginViewModel : ViewModel() {
         }
     }
 
-    fun logout() {
+    fun updateFcmToken(userId: Int, token: String) {
+        viewModelScope.launch {
+            try {
+                Log.d("LoginViewModel", "📱 Updating FCM token for user $userId: $token")
+                val response = apiService.updateFcmToken(userId, mapOf("token" to token))
+                if (response.isSuccessful) {
+                    Log.d("LoginViewModel", "✅ FCM token updated successfully")
+                } else {
+                    Log.e("LoginViewModel", "❌ FCM token update failed: ${response.errorBody()?.string()}")
+                }
+            } catch (e: Exception) {
+               Log.e("LoginViewModel", "❌ Exception updating FCM token", e)
+            }
+        }
+    }
+
+    fun logout(context: Context) {
+        clearSavedCredentials(context)
         webSocketManager.disconnect()
         _loginState.value = LoginState.Idle
         _users.value = emptyList()
         _messages.value = emptyList()
         _subscription.value = null
+    }
+
+    private fun getSharedPreferences(context: Context): SharedPreferences {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    private fun saveLoginCredentials(context: Context, email: String, password: String) {
+        val prefs = getSharedPreferences(context)
+        prefs.edit()
+            .putString(KEY_USER_EMAIL, email)
+            .putString(KEY_USER_PASSWORD, password)
+            .putBoolean(KEY_IS_LOGGED_IN, true)
+            .apply()
+    }
+
+    fun getSavedCredentials(context: Context): Pair<String, String>? {
+        val prefs = getSharedPreferences(context)
+        val email = prefs.getString(KEY_USER_EMAIL, null)
+        val password = prefs.getString(KEY_USER_PASSWORD, null)
+        return if (email != null && password != null) Pair(email, password) else null
+    }
+
+    private fun clearSavedCredentials(context: Context) {
+        val prefs = getSharedPreferences(context)
+        prefs.edit()
+            .remove(KEY_USER_EMAIL)
+            .remove(KEY_USER_PASSWORD)
+            .putBoolean(KEY_IS_LOGGED_IN, false)
+            .apply()
+    }
+
+    fun tryAutoLogin(context: Context) {
+        val savedCredentials = getSavedCredentials(context)
+        if (savedCredentials != null) {
+            val (email, password) = savedCredentials
+            login(context, email, password, rememberMe = true)
+        }
+    }
+
+    fun isLoggedIn(context: Context): Boolean {
+        val prefs = getSharedPreferences(context)
+        return prefs.getBoolean(KEY_IS_LOGGED_IN, false)
     }
 
     fun fetchAllUsers() {
@@ -514,8 +588,7 @@ class LoginViewModel : ViewModel() {
     fun cancelChatRequest(requestId: Int, userId: Int) {
         viewModelScope.launch {
             try {
-                val response = apiService.cancelChatRequest(requestId, userId)
-                if (response.isSuccessful) fetchChatRequests(userId)
+                if (apiService.cancelChatRequest(requestId, userId).isSuccessful) fetchChatRequests(userId)
             } catch (e: Exception) {}
         }
     }
@@ -523,8 +596,7 @@ class LoginViewModel : ViewModel() {
     fun sendChatRequest(senderId: Int, receiverId: Int) {
         viewModelScope.launch {
             try {
-                val response = apiService.sendChatRequest(mapOf("senderId" to senderId, "receiverId" to receiverId))
-                if (response.isSuccessful) fetchChatRequests(senderId)
+                if (apiService.sendChatRequest(mapOf("senderId" to senderId, "receiverId" to receiverId)).isSuccessful) fetchChatRequests(senderId)
             } catch (e: Exception) {}
         }
     }
@@ -532,12 +604,8 @@ class LoginViewModel : ViewModel() {
     fun blockUser(blockerId: Int, blockedId: Int, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             try {
-                val response = apiService.blockUser(blockerId, blockedId)
-                if (response.isSuccessful) {
+                if (apiService.blockUser(blockerId, blockedId).isSuccessful) {
                     fetchAllUsers()
-                    fetchFavourites(blockerId)
-                    fetchChatRequests(blockerId)
-                    fetchMessages(blockerId)
                     onSuccess()
                 }
             } catch (e: Exception) {}
@@ -547,12 +615,8 @@ class LoginViewModel : ViewModel() {
     fun unblockUser(blockerId: Int, blockedId: Int, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             try {
-                val response = apiService.unblockUser(blockerId, blockedId)
-                if (response.isSuccessful) {
+                if (apiService.unblockUser(blockerId, blockedId).isSuccessful) {
                     fetchAllUsers()
-                    fetchFavourites(blockerId)
-                    fetchChatRequests(blockerId)
-                    fetchMessages(blockerId)
                     onSuccess()
                 }
             } catch (e: Exception) {}
@@ -563,9 +627,7 @@ class LoginViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val response = apiService.getBlockedUsers(blockerId)
-                if (response.isSuccessful) {
-                    response.body()?.let { _blockedUsers.value = it }
-                }
+                if (response.isSuccessful) response.body()?.let { _blockedUsers.value = it }
             } catch (e: Exception) {}
         }
     }

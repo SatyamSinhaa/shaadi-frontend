@@ -122,6 +122,9 @@ interface ApiService {
 
     @GET("api/users/{blockerId}/blocked")
     suspend fun getBlockedUsers(@Path("blockerId") blockerId: Int): Response<List<Map<String, Any>>>
+
+    @POST("api/users/{userId}/fcm-token")
+    suspend fun updateFcmToken(@Path("userId") userId: Int, @Body body: Map<String, String>): Response<Unit>
 }
 
 data class PhotoUpdateRequest(
