@@ -2,11 +2,13 @@ package com.example.myapplication
 
 import android.app.Application
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -22,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -35,6 +38,7 @@ import com.example.myapplication.ui.theme.MyApplicationTheme
 import com.example.myapplication.ui.viewmodel.LoginState
 import com.example.myapplication.ui.viewmodel.LoginViewModel
 import com.example.myapplication.ui.viewmodel.PlansViewModel
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -59,10 +63,10 @@ fun AppNavigation(
     val loginState by loginViewModel.loginState.collectAsState()
     val messages by loginViewModel.messages.collectAsState()
     val unreadNotificationCount by loginViewModel.unreadNotificationCount.collectAsState()
-    val selectedUser by loginViewModel.selectedUser.collectAsState<User?>()
+    val selectedUser by loginViewModel.selectedUser.collectAsState()
+    val chatRequests by loginViewModel.chatRequests.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
     var showFavourites by remember { mutableStateOf(false) }
-    var showMessages by remember { mutableStateOf(false) }
     var showRegister by remember { mutableStateOf(false) }
     var registrationSuccessMessage by remember { mutableStateOf<String?>(null) }
     var registeredUser by remember { mutableStateOf<User?>(null) }
@@ -73,7 +77,7 @@ fun AppNavigation(
     var showSearch by remember { mutableStateOf(false) }
     var showNotifications by remember { mutableStateOf(false) }
     var showBlockedProfiles by remember { mutableStateOf(false) }
-    var showSubscriptionDetails by remember { mutableStateOf(false) } // Add this state
+    var showSubscriptionDetails by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     // State for Search in Messages
@@ -88,23 +92,17 @@ fun AppNavigation(
     val scope = rememberCoroutineScope()
 
     // Navigation Item Definitions
-    // 0: Home, 1: Matches, 2: Messages, 3: Profile
     val navItems = listOf(
         Triple("Home", Icons.Filled.Home, 0),
         Triple("Matches", Icons.Filled.ThumbUp, 1),
         Triple("Messages", Icons.Filled.Email, 2),
-        Triple("Profile", null, 3) // Profile uses custom icon logic
+        Triple("Profile", null, 3)
     )
 
     when (loginState) {
         is LoginState.Success -> {
             val currentUser = (loginState as LoginState.Success).user
             val selectedUserValue = selectedUser
-
-            // Initialize data after successful login
-            LaunchedEffect(currentUser.id) {
-                // Data initialization handled by individual screens
-            }
 
             val unreadConversationCount = remember(messages, currentUser.id) {
                 messages
@@ -113,19 +111,11 @@ fun AppNavigation(
                     .count()
             }
 
-            // Check for missing profile fields
-            val hasMissingFields = remember(currentUser) {
-                currentUser.bio.isNullOrBlank() ||
-                currentUser.age == null ||
-                currentUser.gender.isNullOrBlank() ||
-                currentUser.gotr.isNullOrBlank() ||
-                currentUser.caste.isNullOrBlank() ||
-                currentUser.category.isNullOrBlank() ||
-                currentUser.religion.isNullOrBlank() ||
-                currentUser.cityTown.isNullOrBlank() ||
-                currentUser.district.isNullOrBlank() ||
-                currentUser.state.isNullOrBlank()
+            val pendingChatRequestCount = remember(chatRequests, currentUser.id) {
+                chatRequests.count { it.receiver.id == currentUser.id && it.status == "PENDING" }
             }
+
+            val totalMessageTabCount = unreadConversationCount + pendingChatRequestCount
 
             val profileIcon: @Composable () -> Unit = {
                 Box {
@@ -149,23 +139,9 @@ fun AppNavigation(
                     } else {
                         Icon(Icons.Filled.Person, contentDescription = "Profile")
                     }
-
-                    // Warning badge for missing fields
-                    if (hasMissingFields) {
-                        Icon(
-                            imageVector = Icons.Filled.Warning,
-                            contentDescription = "Incomplete Profile",
-                            tint = Color.Red, // Or MaterialTheme.colorScheme.error
-                            modifier = Modifier
-                                .size(12.dp)
-                                .align(Alignment.TopEnd)
-                                .background(MaterialTheme.colorScheme.surface, CircleShape)
-                        )
-                    }
                 }
             }
 
-            // Common Bottom Bar Composable to reduce duplication
             val bottomBarContent: @Composable () -> Unit = {
                 NavigationBar(
                     modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)
@@ -176,31 +152,21 @@ fun AppNavigation(
                             onClick = {
                                 selectedTab = index
                                 showFavourites = false
-                                showMessages = false
                                 showPlans = false
                                 showSearch = false
                                 showNotifications = false
-                                isSearchActive = false // Reset search when switching tabs
+                                isSearchActive = false
                                 searchQuery = ""
-<<<<<<< HEAD
-                                loginViewModel.selectUser(null) // Correctly clear user selection
-=======
-                                // User selection handled by individual screens
->>>>>>> 4ed8796c031f7770b49fdf4b63a3f550e23bb577
+                                loginViewModel.selectUser(null)
                                 if (index == 2) refreshMessages = !refreshMessages
                             },
                             icon = {
                                 if (index == 3) {
                                     profileIcon()
                                 } else if (index == 2) {
-                                    // Messages with Badge
-                                    if (unreadConversationCount > 0) {
+                                    if (totalMessageTabCount > 0) {
                                         BadgedBox(
-                                            badge = {
-                                                Badge {
-                                                    Text(unreadConversationCount.toString())
-                                                }
-                                            }
+                                            badge = { Badge { Text(totalMessageTabCount.toString()) } }
                                         ) {
                                             Icon(icon!!, contentDescription = label)
                                         }
@@ -220,14 +186,13 @@ fun AppNavigation(
                             showPlans = true
                             selectedTab = -1
                         },
-                        icon = { Icon(Icons.Filled.Star, contentDescription = "Premium Membership") },
+                        icon = { Icon(Icons.Filled.Star, contentDescription = "Premium") },
                         label = { Text("Premium") }
                     )
                 }
             }
 
             if (showChatDetail != null) {
-                // Chat detail takes precedence over user profile or other overlays
                 BackHandler { showChatDetail = null }
                 MessageDetailScreen(
                     modifier = modifier,
@@ -236,20 +201,11 @@ fun AppNavigation(
                     viewModel = loginViewModel
                 )
             } else if (selectedUserValue != null) {
-<<<<<<< HEAD
-                // User Profile navigation
                 BackHandler { loginViewModel.selectUser(null) }
                 UserProfileScreen(
                     modifier = modifier,
                     user = selectedUserValue,
-                    onBack = { loginViewModel.selectUser(null) }, // Pass correct back action
-=======
-                BackHandler { /* User selection cleared */ }
-                UserProfileScreen(
-                    modifier = modifier,
-                    user = selectedUserValue,
-                    onBack = { /* User selection cleared */ },
->>>>>>> 4ed8796c031f7770b49fdf4b63a3f550e23bb577
+                    onBack = { loginViewModel.selectUser(null) },
                     onChatClick = { user -> showChatDetail = user },
                     onAcceptRequest = {}
                 )
@@ -258,9 +214,7 @@ fun AppNavigation(
                 BlockedProfilesScreen(
                     modifier = modifier,
                     onBack = { showBlockedProfiles = false },
-                    onUserClick = { userId ->
-                        loginViewModel.fetchUserById(userId)
-                    }
+                    onUserClick = { userId -> loginViewModel.fetchUserById(userId) }
                 )
             } else if (showSubscriptionDetails) {
                 BackHandler { showSubscriptionDetails = false }
@@ -282,7 +236,7 @@ fun AppNavigation(
                     modifier = modifier,
                     topBar = {
                         TopAppBar(
-                            title = { Text("Shaadi App") },
+                            title = { Text("Hamar Jodi") },
                             actions = {
                                 IconButton(onClick = {
                                     plansViewModel.fetchSubscriptionHistory(currentUser.id)
@@ -305,16 +259,13 @@ fun AppNavigation(
                     FavouritesScreen(modifier = Modifier.padding(padding), onBack = { showFavourites = false })
                 }
             } else if (showSearch) {
-                // This is the global search screen (not used for messages)
                 BackHandler { showSearch = false }
                 Scaffold(
                     bottomBar = bottomBarContent
                 ) { padding ->
                     SearchScreen(
                         modifier = Modifier.padding(padding),
-                        onUserProfileClick = { user ->
-                            loginViewModel.fetchUserById(user.id)
-                        }
+                        onUserProfileClick = { user -> loginViewModel.fetchUserById(user.id) }
                     )
                 }
             } else if (showNotifications) {
@@ -331,7 +282,7 @@ fun AppNavigation(
                         drawerContent = {
                             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                                 ModalDrawerSheet(
-                                    modifier = Modifier.fillMaxWidth(0.7f) // Set width to 70% of screen
+                                    modifier = Modifier.fillMaxWidth(0.7f)
                                 ) {
                                     Column(
                                         modifier = Modifier
@@ -364,19 +315,19 @@ fun AppNavigation(
                                         NavigationDrawerItem(
                                             label = { Text("About Us") },
                                             selected = false,
-                                            onClick = { /* Handle About click */ scope.launch { drawerState.close() } },
+                                            onClick = { scope.launch { drawerState.close() } },
                                             icon = { Icon(Icons.Filled.Info, contentDescription = null) }
                                         )
                                         NavigationDrawerItem(
                                             label = { Text("Contact Us") },
                                             selected = false,
-                                            onClick = { /* Handle Contact click */ scope.launch { drawerState.close() } },
+                                            onClick = { scope.launch { drawerState.close() } },
                                             icon = { Icon(Icons.Filled.Email, contentDescription = null) }
                                         )
                                         NavigationDrawerItem(
                                             label = { Text("Terms & Policy") },
                                             selected = false,
-                                            onClick = { /* Handle Terms click */ scope.launch { drawerState.close() } },
+                                            onClick = { scope.launch { drawerState.close() } },
                                             icon = { Icon(Icons.Filled.Description, contentDescription = null) }
                                         )
                                         Spacer(modifier = Modifier.weight(1f))
@@ -387,7 +338,7 @@ fun AppNavigation(
                                                 scope.launch { drawerState.close() }
                                                 loginViewModel.logout(context)
                                             },
-                                            icon = { Icon(Icons.Filled.ExitToApp, contentDescription = null) }
+                                            icon = { Icon(Icons.Default.ExitToApp, contentDescription = null) }
                                         )
                                     }
                                 }
@@ -399,9 +350,8 @@ fun AppNavigation(
                             Scaffold(
                                 modifier = modifier,
                                 topBar = {
-                                    if (!isChatDetailVisible) {
+                                    if (!isChatDetailVisible && selectedUserValue == null) {
                                         if (isSearchActive && selectedTab == 2) {
-                                            // Show Search Bar in TopAppBar when active in Messages tab
                                             TopAppBar(
                                                 title = {
                                                     TextField(
@@ -422,11 +372,10 @@ fun AppNavigation(
                                                         isSearchActive = false
                                                         searchQuery = ""
                                                     }) {
-                                                        Icon(Icons.Filled.ArrowBack, contentDescription = "Close Search")
+                                                        Icon(Icons.Default.ArrowBack, contentDescription = "Close Search")
                                                     }
                                                 },
                                                 actions = {
-                                                    // Optional: Clear button or search button if needed, but typing usually filters directly
                                                     if (searchQuery.isNotEmpty()) {
                                                         IconButton(onClick = { searchQuery = "" }) {
                                                             Icon(Icons.Filled.Close, contentDescription = "Clear")
@@ -439,17 +388,12 @@ fun AppNavigation(
                                                 searchQuery = ""
                                             }
                                         } else {
-                                            // Regular TopAppBar
                                             TopAppBar(
-                                                title = { Text("Shaadi App") },
+                                                title = { Text("Hamar Jodi") },
                                                 actions = {
                                                     if (selectedTab != 3) {
                                                         IconButton(onClick = {
-                                                            if (selectedTab == 2) {
-                                                                isSearchActive = true
-                                                            } else {
-                                                                showSearch = true
-                                                            }
+                                                            if (selectedTab == 2) isSearchActive = true else showSearch = true
                                                         }) {
                                                             Icon(Icons.Filled.Search, contentDescription = "Search")
                                                         }
@@ -460,16 +404,10 @@ fun AppNavigation(
                                                     }) {
                                                         Icon(Icons.Filled.Favorite, contentDescription = "Favourites")
                                                     }
-                                                    IconButton(onClick = {
-                                                        showNotifications = true
-                                                    }) {
+                                                    IconButton(onClick = { showNotifications = true }) {
                                                         if (unreadNotificationCount > 0) {
                                                             BadgedBox(
-                                                                badge = {
-                                                                    Badge {
-                                                                        Text(unreadNotificationCount.toString())
-                                                                    }
-                                                                }
+                                                                badge = { Badge { Text(unreadNotificationCount.toString()) } }
                                                             ) {
                                                                 Icon(Icons.Filled.Notifications, contentDescription = "Notifications")
                                                             }
@@ -479,9 +417,7 @@ fun AppNavigation(
                                                     }
                                                     if (selectedTab == 3) {
                                                         IconButton(onClick = {
-                                                            scope.launch {
-                                                                if (drawerState.isClosed) drawerState.open() else drawerState.close()
-                                                            }
+                                                            scope.launch { drawerState.open() }
                                                         }) {
                                                             Icon(Icons.Filled.Menu, contentDescription = "Options")
                                                         }
@@ -492,78 +428,44 @@ fun AppNavigation(
                                     }
                                 },
                                 bottomBar = {
-                                    if (!isChatDetailVisible) {
+                                    if (!isChatDetailVisible && selectedUserValue == null) {
                                         bottomBarContent()
                                     }
                                 }
                             ) { padding ->
-                                // FCM Token Sync and Permission Request
                                 val launcher = rememberLauncherForActivityResult(
-                                    contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
-                                    onResult = { isGranted ->
-                                        if (isGranted) {
-                                            // Permission granted
-                                        }
-                                    }
+                                    contract = ActivityResultContracts.RequestPermission(),
+                                    onResult = { }
                                 )
                                 
                                 LaunchedEffect(Unit) {
-                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                                        launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                                    }
-
-                                    // Check for pending FCM token from onNewToken
-                                    val prefs = context.getSharedPreferences("shaadi_prefs", android.content.Context.MODE_PRIVATE)
-                                    val pendingToken = prefs.getString("pending_fcm_token", null)
-                                    if (pendingToken != null) {
-                                        loginViewModel.updateFcmToken(currentUser.id, pendingToken)
-                                        prefs.edit().remove("pending_fcm_token").apply()
-                                    } else {
-                                        // Get fresh token
-                                        com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-                                            if (!task.isSuccessful) {
-                                                return@addOnCompleteListener
-                                            }
-                                            val token = task.result
-                                            loginViewModel.updateFcmToken(currentUser.id, token)
+                                    try {
+                                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                            launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                                         }
-                                    }
 
-                                    // Check battery optimization for FCM notifications
-                                    val notificationHelper = com.example.myapplication.util.NotificationHelper(context)
-                                    if (!notificationHelper.isBatteryOptimizationIgnored()) {
-                                        // Request battery optimization exemption to ensure notifications work when app is killed
-                                        notificationHelper.requestBatteryOptimizationExemption()
+                                        val prefs = context.getSharedPreferences("shaadi_prefs", android.content.Context.MODE_PRIVATE)
+                                        val pendingToken = prefs.getString("pending_fcm_token", null)
+                                        if (pendingToken != null) {
+                                            loginViewModel.updateFcmToken(currentUser.id, pendingToken)
+                                            prefs.edit().remove("pending_fcm_token").apply()
+                                        } else {
+                                            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                                                if (task.isSuccessful) {
+                                                    loginViewModel.updateFcmToken(currentUser.id, task.result)
+                                                }
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e("MainActivity", "Firebase initialization failed: ${e.message}")
                                     }
                                 }
                                 
                                 when (selectedTab) {
-                                    0 -> HomeScreen(
-                                        modifier = Modifier.padding(padding),
-                                        viewModel = loginViewModel,
-                                        onUserClick = { user ->
-                                            loginViewModel.fetchUserById(user.id)
-                                        }
-                                    )
-                                    1 -> UserListScreen(
-                                        modifier = Modifier.padding(padding),
-                                        viewModel = loginViewModel,
-                                        onChatClick = { user ->
-                                            showChatDetail = user
-                                        },
-                                        onUserProfileClick = { user ->
-                                            loginViewModel.fetchUserById(user.id)
-                                        }
-                                    )
-                                    // Search (2) removed, Messages becomes 2
-                                    2 -> MessagesScreen(
-                                        modifier = Modifier.padding(padding),
-                                        viewModel = loginViewModel,
-                                        refreshTrigger = refreshMessages,
-                                        onChatStatusChanged = { isVisible -> isChatDetailVisible = isVisible },
-                                        searchQuery = searchQuery // Pass the search query down
-                                    )
-                                    3 -> ProfileScreen(modifier = Modifier.padding(padding), viewModel = loginViewModel)
+                                    0 -> HomeScreen(Modifier.padding(padding), viewModel = loginViewModel, onUserClick = { user -> loginViewModel.fetchUserById(user.id) })
+                                    1 -> UserListScreen(Modifier.padding(padding), viewModel = loginViewModel, onChatClick = { user -> showChatDetail = user }, onUserProfileClick = { user -> loginViewModel.fetchUserById(user.id) })
+                                    2 -> MessagesScreen(Modifier.padding(padding), viewModel = loginViewModel, refreshTrigger = refreshMessages, onChatStatusChanged = { isVisible -> isChatDetailVisible = isVisible }, searchQuery = searchQuery)
+                                    3 -> ProfileScreen(Modifier.padding(padding), viewModel = loginViewModel)
                                 }
                             }
                         }
@@ -572,7 +474,6 @@ fun AppNavigation(
             }
         }
         else -> {
-            // Auto-login attempt on app start
             LaunchedEffect(Unit) {
                 if (loginViewModel.isLoggedIn(context)) {
                     loginViewModel.tryAutoLogin(context)
@@ -580,26 +481,9 @@ fun AppNavigation(
             }
 
             if (showRegister) {
-                // Updated RegisterScreen takes over the full registration flow
-                RegisterScreen(modifier = modifier, onBackToLogin = {
-                    registrationSuccessMessage = it
-                    showRegister = false
-                }, onRegisterSuccess = { user ->
-                    registeredUser = user
-                    showRegister = false
-                    // After full registration success, we can treat it as login or whatever the flow requires
-                    // Currently RegisterScreen handles the steps internally.
-                    // If we need to login automatically, we can do it here or just show success.
-                    // Assuming user needs to login:
-                    registrationSuccessMessage = "Registration complete. Please Login."
-                })
+                RegisterScreen(modifier = modifier, onBackToLogin = { registrationSuccessMessage = it; showRegister = false }, onRegisterSuccess = { user -> registeredUser = user; showRegister = false; registrationSuccessMessage = "Registration complete. Please Login." })
             } else {
-                LoginScreen(
-                    modifier = modifier,
-                    onRegisterClick = { showRegister = true },
-                    registrationSuccessMessage = registrationSuccessMessage,
-                    onMessageShown = { registrationSuccessMessage = null }
-                )
+                LoginScreen(modifier = modifier, onRegisterClick = { showRegister = true }, registrationSuccessMessage = registrationSuccessMessage, onMessageShown = { registrationSuccessMessage = null })
             }
         }
     }

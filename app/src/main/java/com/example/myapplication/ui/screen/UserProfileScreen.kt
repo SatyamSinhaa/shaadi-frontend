@@ -8,16 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.GridOn
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -102,6 +93,7 @@ fun UserProfileScreen(
             onDismissRequest = { showBottomSheet = false },
             sheetState = sheetState
         ) {
+            val scope = rememberCoroutineScope()
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -114,7 +106,6 @@ fun UserProfileScreen(
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
-                // Option: Block/Unblock User
                 if (isBlocked) {
                     Row(
                         modifier = Modifier
@@ -154,33 +145,40 @@ fun UserProfileScreen(
                         Text(text = "Block User", style = MaterialTheme.typography.bodyLarge)
                     }
                 }
-                
                 Spacer(modifier = Modifier.height(32.dp))
             }
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(text = user.name) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { showBottomSheet = true }) {
-                        Icon(imageVector = Icons.Filled.MoreVert, contentDescription = "Options")
-                    }
-                }
+    // Removed the nested Scaffold and TopAppBar to fix the excessive top spacing
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        // Custom Header with Back Button and "Profile" label
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
+            }
+            Text(
+                text = "Profile",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.weight(1f)
             )
+            IconButton(onClick = { showBottomSheet = true }) {
+                Icon(imageVector = Icons.Filled.MoreVert, contentDescription = "Options")
+            }
         }
-    ) { paddingValues ->
+
         Column(
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -189,7 +187,7 @@ fun UserProfileScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 content = {
                     Row(
                         modifier = Modifier
@@ -200,7 +198,7 @@ fun UserProfileScreen(
                         // Profile Photo
                         Box(
                             modifier = Modifier
-                                .size(100.dp)
+                                .size(90.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
                                 .clickable { if (user.photoUrl != null) showEnlargedPhoto = true },
@@ -216,13 +214,13 @@ fun UserProfileScreen(
                             } else {
                                 Text(
                                     text = user.name.firstOrNull()?.toString() ?: "?",
-                                    style = MaterialTheme.typography.headlineLarge,
+                                    style = MaterialTheme.typography.headlineMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                         
-                        Spacer(modifier = Modifier.width(24.dp))
+                        Spacer(modifier = Modifier.width(16.dp))
                         
                         Column(
                             verticalArrangement = Arrangement.Center,
@@ -231,16 +229,16 @@ fun UserProfileScreen(
                         ) {
                             Text(
                                 text = user.name,
-                                style = MaterialTheme.typography.headlineMedium,
+                                style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
                                 text = user.email,
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
 
                             // Action Buttons
                             if (isBlocked) {
@@ -252,62 +250,67 @@ fun UserProfileScreen(
                                             }
                                         }
                                     },
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text("Unblock")
                                 }
                             } else {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    if (canChat) {
-                                        Button(onClick = { onChatClick(user) }) {
-                                            Icon(Icons.Filled.ChatBubbleOutline, contentDescription = "Chat")
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text("Chat")
-                                        }
-                                    } else if (chatRequest != null && chatRequest.status == "PENDING") {
-                                        if (chatRequest.sender.id == currentUserId) {
-                                            Button(
-                                                onClick = {
-                                                    viewModel.cancelChatRequest(chatRequest.id, currentUserId ?: 0)
-                                                },
-                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                                            ) {
-                                                Text("Cancel Request")
-                                            }
-                                        } else {
-                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                Button(
-                                                    onClick = {
-                                                        viewModel.acceptChatRequest(chatRequest.id, currentUserId ?: 0, onSuccess = {
-                                                            onAcceptRequest(user)
-                                                        })
-                                                    },
-                                                ) {
-                                                    Icon(Icons.Filled.Check, contentDescription = "Accept")
-                                                    Spacer(modifier = Modifier.width(4.dp))
-                                                    Text("Accept")
-                                                }
-                                                Button(
-                                                    onClick = { viewModel.rejectChatRequest(chatRequest.id, currentUserId ?: 0) },
-                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-                                                ) {
-                                                    Text("Reject", color = MaterialTheme.colorScheme.onErrorContainer)
-                                                }
-                                            }
-                                        }
-                                    } else {
+                                if (canChat) {
+                                    Button(
+                                        onClick = { onChatClick(user) },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(Icons.Filled.ChatBubbleOutline, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Chat")
+                                    }
+                                } else if (chatRequest != null && chatRequest.status == "PENDING") {
+                                    if (chatRequest.sender.id == currentUserId) {
                                         Button(
                                             onClick = {
-                                                viewModel.sendChatRequest(currentUserId ?: 0, user.id)
-                                            }
+                                                viewModel.cancelChatRequest(chatRequest.id, currentUserId ?: 0)
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                            modifier = Modifier.fillMaxWidth()
                                         ) {
-                                            Icon(Icons.Filled.Send, contentDescription = null)
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text("Send Request")
+                                            Text("Cancel Request")
                                         }
+                                    } else {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Button(
+                                                onClick = {
+                                                    viewModel.acceptChatRequest(chatRequest.id, currentUserId ?: 0, onSuccess = {
+                                                        onAcceptRequest(user)
+                                                    })
+                                                },
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Accept")
+                                            }
+                                            Button(
+                                                onClick = { viewModel.rejectChatRequest(chatRequest.id, currentUserId ?: 0) },
+                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                                                modifier = Modifier.weight(0.8f)
+                                            ) {
+                                                Text("Reject", color = MaterialTheme.colorScheme.onErrorContainer)
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Button(
+                                        onClick = {
+                                            viewModel.sendChatRequest(currentUserId ?: 0, user.id)
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(Icons.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Send Request")
                                     }
                                 }
                             }
@@ -319,13 +322,15 @@ fun UserProfileScreen(
             TabRow(
                 selectedTabIndex = selectedTabIndex,
                 containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.primary
+                contentColor = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 8.dp)
             ) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
                         selected = selectedTabIndex == index,
                         onClick = { selectedTabIndex = index },
-                        icon = { Icon(tabIcons[index], contentDescription = title) }
+                        icon = { Icon(tabIcons[index], contentDescription = title, modifier = Modifier.size(20.dp)) },
+                        text = { Text(title, style = MaterialTheme.typography.labelMedium) }
                     )
                 }
             }
@@ -336,7 +341,7 @@ fun UserProfileScreen(
             ) {
                 when (selectedTabIndex) {
                     0 -> {
-                        if (user.bio != null) {
+                        if (user.bio != null && user.bio.isNotBlank()) {
                             ProfileSection(title = "About Me") {
                                 Text(
                                     text = user.bio,

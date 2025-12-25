@@ -37,8 +37,6 @@ fun RequestScreen(
     val loginState by viewModel.loginState.collectAsState()
     val allChatRequests by viewModel.chatRequests.collectAsState()
 
-    var showUserProfileScreen by remember { mutableStateOf<User?>(null) }
-
     // Filter to only show pending requests where current user is the receiver
     val currentUserId = (loginState as? LoginState.Success)?.user?.id
     val chatRequests = allChatRequests.filter { request ->
@@ -52,56 +50,53 @@ fun RequestScreen(
         }
     }
 
-    if (showUserProfileScreen != null) {
-        BackHandler { showUserProfileScreen = null }
-        UserProfileScreen(
-            modifier = modifier,
-            user = showUserProfileScreen,
-            onBack = { showUserProfileScreen = null },
-            onChatClick = onChatClick,
-            onAcceptRequest = {}, // Changed from onChatClick to {} to prevent auto-opening chat
-            viewModel = viewModel
-        )
-    } else {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("Requests") },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                        }
-                    }
-                )
+    // Header and List
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+    ) {
+        // Header with Back Button and Title
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
             }
-        ) { paddingValues ->
-            if (chatRequests.isEmpty()) {
-                Box(
-                    modifier = modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("No pending requests")
-                }
-            } else {
-                LazyColumn(
-                    modifier = modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(chatRequests) { request ->
-                        // Pass the current logged-in user's ID to the accept/reject functions
-                        val currentUserId = (loginState as? LoginState.Success)?.user?.id ?: 0
-                        RequestItem(
-                            user = request.sender,
-                            onAccept = { viewModel.acceptChatRequest(request.id, currentUserId, onSuccess = {}) },
-                            onReject = { viewModel.rejectChatRequest(request.id, currentUserId) },
-                            onClick = { showUserProfileScreen = request.sender }
-                        )
-                    }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Chat Requests",
+                style = MaterialTheme.typography.headlineMedium
+            )
+        }
+
+        if (chatRequests.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("No pending requests")
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(chatRequests) { request ->
+                    val currentUserId = (loginState as? LoginState.Success)?.user?.id ?: 0
+                    RequestItem(
+                        user = request.sender,
+                        onAccept = { viewModel.acceptChatRequest(request.id, currentUserId, onSuccess = {}) },
+                        onReject = { viewModel.rejectChatRequest(request.id, currentUserId) },
+                        onClick = { 
+                            // Set global selected user to trigger full-screen profile in MainActivity
+                            viewModel.selectUser(request.sender) 
+                        }
+                    )
                 }
             }
         }
@@ -116,7 +111,7 @@ fun RequestItem(
     onClick: () -> Unit
 ) {
     Card(
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
@@ -172,7 +167,7 @@ fun RequestItem(
                 
                 IconButton(
                     onClick = onAccept,
-                    colors = IconButtonDefaults.iconButtonColors(contentColor = Color.Green)
+                    colors = IconButtonDefaults.iconButtonColors(contentColor = Color(0xFF4CAF50)) // Using a standard green
                 ) {
                     Icon(Icons.Default.Check, contentDescription = "Accept")
                 }

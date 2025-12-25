@@ -170,9 +170,11 @@ class LoginViewModel : ViewModel() {
                         _loginState.value = LoginState.Success(user)
                         saveLoginCredentials(context, userName, password)
                         saveUserId(context, user.id)
-                        webSocketManager.connect(user.id)
-                        fetchSubscription(user.id)
-                        fetchAllUsers()
+                    webSocketManager.connect(user.id)
+                    fetchSubscription(user.id)
+                    fetchAllUsers()
+                    fetchMessages(user.id)
+                    fetchChatRequests(user.id)
                     }
                 } else {
                     _loginState.value = LoginState.Error("Login failed")
