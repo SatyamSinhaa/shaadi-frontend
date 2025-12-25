@@ -182,7 +182,7 @@ fun AppNavigation(
                                 showNotifications = false
                                 isSearchActive = false // Reset search when switching tabs
                                 searchQuery = ""
-                                // User selection handled by individual screens
+                                loginViewModel.selectUser(null) // Correctly clear user selection
                                 if (index == 2) refreshMessages = !refreshMessages
                             },
                             icon = {
@@ -232,11 +232,12 @@ fun AppNavigation(
                     viewModel = loginViewModel
                 )
             } else if (selectedUserValue != null) {
-                BackHandler { /* User selection cleared */ }
+                // User Profile navigation
+                BackHandler { loginViewModel.selectUser(null) }
                 UserProfileScreen(
                     modifier = modifier,
                     user = selectedUserValue,
-                    onBack = { /* User selection cleared */ },
+                    onBack = { loginViewModel.selectUser(null) }, // Pass correct back action
                     onChatClick = { user -> showChatDetail = user },
                     onAcceptRequest = {}
                 )

@@ -16,6 +16,8 @@ import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -302,6 +304,8 @@ fun UserProfileScreen(
                                                 viewModel.sendChatRequest(currentUserId ?: 0, user.id)
                                             }
                                         ) {
+                                            Icon(Icons.Filled.Send, contentDescription = null)
+                                            Spacer(modifier = Modifier.width(8.dp))
                                             Text("Send Request")
                                         }
                                     }
@@ -366,27 +370,8 @@ fun UserProfileScreen(
                         }
                     }
                     1 -> {
-                        if (user.photoUrl != null) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Card(
-                                    modifier = Modifier.weight(1f).aspectRatio(1f),
-                                    shape = RoundedCornerShape(8.dp),
-                                    elevation = CardDefaults.cardElevation(2.dp),
-                                    onClick = { if (user.photoUrl != null) showEnlargedPhoto = true }
-                                ) {
-                                    AsyncImage(
-                                        model = user.photoUrl,
-                                        contentDescription = "Photo",
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                }
-                                Spacer(modifier = Modifier.weight(1f))
-                            }
-                        } else {
-                            Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                                Text("No Photos Yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                        Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text("No Photos Yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
