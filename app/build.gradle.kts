@@ -73,6 +73,9 @@ dependencies {
     implementation("io.reactivex.rxjava2:rxandroid:2.1.1")
     // STOMP over WebSocket for real-time messaging
     implementation("com.github.NaikSoftware:StompProtocolAndroid:1.6.6")
+
+    // Note: PhonePe Intent SDK removed to avoid resolution issues. 
+    // Payments are handled via generic UPI Intent in MainActivity.
     
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

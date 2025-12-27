@@ -136,7 +136,22 @@ interface ApiService {
 
     @DELETE("api/users/{id}")
     suspend fun deleteUser(@Path("id") id: Int): Response<Unit>
+
+    @POST("api/payment/initiate")
+    suspend fun initiatePayment(@Body request: PaymentRequest): Response<Map<String, String>>
+
+    @POST("api/payment/create-order")
+    suspend fun createOrder(@Body request: CreateOrderRequest): Response<CreateOrderResponse>
+
+    @GET("api/payment/order-status/{orderId}")
+    suspend fun getOrderStatus(@Path("orderId") orderId: String): Response<Map<String, Any>>
 }
+
+data class PaymentRequest(
+    val amount: Double,
+    val userId: String,
+    val mobileNumber: String
+)
 
 data class PhotoUpdateRequest(
     val userId: Int,
@@ -153,4 +168,18 @@ data class PaginatedUserResponse(
     val hasPrevious: Boolean,
     val isFirst: Boolean,
     val isLast: Boolean
+)
+
+data class CreateOrderRequest(
+    val amount: Double,
+    val userId: String,
+    val planId: String? = null
+)
+
+data class CreateOrderResponse(
+    val success: Boolean,
+    val orderId: String,
+    val orderToken: String,
+    val amount: Long,
+    val currency: String
 )

@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.myapplication.MainActivity
 import com.example.myapplication.data.model.Plan
 import com.example.myapplication.data.model.Subscription
 import com.example.myapplication.ui.viewmodel.LoginViewModel
@@ -37,7 +38,8 @@ fun PlansScreen(
     modifier: Modifier = Modifier,
     onBack: () -> Unit,
     viewModel: PlansViewModel = viewModel(),
-    loginViewModel: LoginViewModel = viewModel()
+    loginViewModel: LoginViewModel = viewModel(),
+    activity: MainActivity
 ) {
     val plans by viewModel.plans.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -51,16 +53,17 @@ fun PlansScreen(
         PaymentScreen(
             plan = selectedPlan!!,
             viewModel = viewModel,
-            onBack = { 
-                selectedPlan = null 
+            onBack = {
+                selectedPlan = null
                 viewModel.resetPurchaseState()
             },
             onActivate = {
                 val userId = (loginState as? LoginState.Success)?.user?.id
                 if (userId != null) {
-                    viewModel.purchaseSubscription(userId, selectedPlan!!.id)
+                    activity.initiatePayment(selectedPlan!!.price.toDouble(), userId)
                 }
-            }
+            },
+            activity = activity
         )
     } else {
         Box(

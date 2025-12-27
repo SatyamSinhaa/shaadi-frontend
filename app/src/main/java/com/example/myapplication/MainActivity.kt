@@ -41,15 +41,78 @@ import com.example.myapplication.ui.viewmodel.LoginState
 import com.example.myapplication.ui.viewmodel.LoginViewModel
 import com.example.myapplication.ui.viewmodel.PlansViewModel
 import com.google.firebase.messaging.FirebaseMessaging
+import android.content.Intent
+import android.net.Uri
 import kotlinx.coroutines.launch
+import com.example.myapplication.data.api.RetrofitClient
+import com.example.myapplication.data.api.PaymentRequest
 
 class MainActivity : ComponentActivity() {
+
+    private val paymentRequestCode = 777
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             MyApplicationTheme {
-                AppNavigation()
+                AppNavigation(activity = this)
+            }
+        }
+    }
+
+    fun initiatePayment(amount: Double, userId: Int) {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                val apiService = RetrofitClient.apiService
+                val requestBody = PaymentRequest(
+                    amount = amount,
+                    userId = userId.toString(),
+                    mobileNumber = "9999999999"
+                )
+                val response = apiService.initiatePayment(requestBody)
+                if (response.isSuccessful) {
+                    val responseData = response.body()
+                    if (responseData != null) {
+                        val transactionId = responseData["transactionId"]
+
+                        if (transactionId != null) {
+                            runOnUiThread {
+                                val upiUrl = "tez://upi/pay?pa=merchant@phonepe&pn=PhonePeMerchant&am=$amount&cu=INR&tn=Payment%20for%20Plan&tr=$transactionId"
+                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                    data = Uri.parse(upiUrl)
+                                }
+
+                                if (intent.resolveActivity(packageManager) != null) {
+                                    startActivityForResult(intent, paymentRequestCode)
+                                } else {
+                                    Toast.makeText(this@MainActivity, "No UPI app found. Please install Google Pay or PhonePe.", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "Failed to initiate payment", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Payment initiation error: ${e.message}")
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Payment error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == paymentRequestCode) {
+            if (resultCode == RESULT_OK) {
+                Toast.makeText(this, "Payment completed", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Payment cancelled", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -60,7 +123,8 @@ class MainActivity : ComponentActivity() {
 fun AppNavigation(
     modifier: Modifier = Modifier,
     loginViewModel: LoginViewModel = viewModel(),
-    plansViewModel: PlansViewModel = viewModel()
+    plansViewModel: PlansViewModel = viewModel(),
+    activity: MainActivity
 ) {
     val loginState by loginViewModel.loginState.collectAsState()
     val messages by loginViewModel.messages.collectAsState()
@@ -312,7 +376,7 @@ fun AppNavigation(
                     },
                     bottomBar = bottomBarContent
                 ) { padding ->
-                    PlansScreen(modifier = Modifier.padding(padding), onBack = { showPlans = false }, viewModel = plansViewModel)
+                    PlansScreen(modifier = Modifier.padding(padding), onBack = { showPlans = false }, viewModel = plansViewModel, activity = activity)
                 }
             } else if (showFavourites) {
                 BackHandler { showFavourites = false }
