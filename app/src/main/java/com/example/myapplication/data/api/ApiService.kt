@@ -25,6 +25,14 @@ interface ApiService {
     @GET("api/users")
     suspend fun getAllUsers(
         @Query("gender") gender: String? = null,
+        @Query("currentUserId") currentUserId: Int? = null,
+        @Query("page") page: Int = 0,
+        @Query("size") size: Int = 10
+    ): Response<PaginatedUserResponse>
+
+    @GET("api/users/all")
+    suspend fun getAllUsersList(
+        @Query("gender") gender: String? = null,
         @Query("currentUserId") currentUserId: Int? = null
     ): Response<List<User>>
 
@@ -133,4 +141,16 @@ interface ApiService {
 data class PhotoUpdateRequest(
     val userId: Int,
     val photoUrl: String
+)
+
+data class PaginatedUserResponse(
+    val content: List<User>,
+    val page: Int,
+    val size: Int,
+    val totalElements: Long,
+    val totalPages: Int,
+    val hasNext: Boolean,
+    val hasPrevious: Boolean,
+    val isFirst: Boolean,
+    val isLast: Boolean
 )

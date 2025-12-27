@@ -110,6 +110,13 @@ fun AppNavigation(
             showPlans = false
             showSearch = false
             showNotifications = false
+            showBlockedProfiles = false
+            showSubscriptionDetails = false
+            showDeleteProfile = false
+            showHistory = false
+            showChatDetail = null
+            isSearchActive = false
+            searchQuery = ""
             loginViewModel.selectUser(null)
         }
     }
@@ -174,7 +181,7 @@ fun AppNavigation(
                             color = MaterialTheme.colorScheme.error,
                             shape = CircleShape,
                             modifier = Modifier
-                                .size(16.dp)
+                                .size(14.dp)
                                 .align(Alignment.TopEnd)
                                 .offset(x = 6.dp, y = (-6).dp)
                         ) {
@@ -528,7 +535,7 @@ fun AppNavigation(
                                 
                                 when (selectedTab) {
                                     0 -> HomeScreen(Modifier.padding(padding), viewModel = loginViewModel, onUserClick = { user -> loginViewModel.fetchUserById(user.id) })
-                                    1 -> UserListScreen(Modifier.padding(padding), viewModel = loginViewModel, onChatClick = { user -> showChatDetail = user }, onUserProfileClick = { user -> loginViewModel.fetchUserById(user.id) })
+                                    1 -> MatchesScreen(Modifier.padding(padding), currentUserId = currentUser.id)
                                     2 -> MessagesScreen(Modifier.padding(padding), viewModel = loginViewModel, refreshTrigger = refreshMessages, onChatStatusChanged = { isVisible -> isChatDetailVisible = isVisible }, searchQuery = searchQuery)
                                     3 -> ProfileScreen(Modifier.padding(padding), viewModel = loginViewModel)
                                 }

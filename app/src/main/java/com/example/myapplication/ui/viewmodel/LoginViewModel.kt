@@ -388,7 +388,7 @@ class LoginViewModel : ViewModel() {
         }
         viewModelScope.launch {
             try {
-                val response: Response<List<User>> = apiService.getAllUsers(oppositeGender, currentUser?.id)
+                val response: Response<List<User>> = apiService.getAllUsersList(oppositeGender, currentUser?.id)
                 if (response.isSuccessful) {
                     response.body()?.let { _users.value = it }
                 }

@@ -1,14 +1,18 @@
 package com.example.myapplication.data.repository
 
 import com.example.myapplication.data.api.ApiService
+import com.example.myapplication.data.api.PaginatedUserResponse
 import com.example.myapplication.data.model.Favourite
 import com.example.myapplication.data.model.Subscription
 import com.example.myapplication.data.model.User
 import retrofit2.Response
 
 class UserRepository(private val apiService: ApiService) {
-    suspend fun getAllUsers(gender: String?, currentUserId: Int?): Response<List<User>> =
-        apiService.getAllUsers(gender, currentUserId)
+    suspend fun getAllUsers(gender: String?, currentUserId: Int?, page: Int = 0, size: Int = 10): Response<PaginatedUserResponse> =
+        apiService.getAllUsers(gender, currentUserId, page, size)
+
+    suspend fun getAllUsersList(gender: String?, currentUserId: Int?): Response<List<User>> =
+        apiService.getAllUsersList(gender, currentUserId)
 
     suspend fun getUserById(id: Int): Response<User> = apiService.getUserById(id)
 
