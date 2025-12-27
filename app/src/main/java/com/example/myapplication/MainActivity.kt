@@ -27,6 +27,8 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -78,6 +80,7 @@ fun AppNavigation(
     var showNotifications by remember { mutableStateOf(false) }
     var showBlockedProfiles by remember { mutableStateOf(false) }
     var showSubscriptionDetails by remember { mutableStateOf(false) }
+    var showDeleteProfile by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     // State for Search in Messages
@@ -99,6 +102,18 @@ fun AppNavigation(
         Triple("Profile", null, 3)
     )
 
+    // Handle Landing Screen after Login
+    LaunchedEffect(loginState) {
+        if (loginState is LoginState.Success) {
+            selectedTab = 0 // Landing on Home Screen
+            showFavourites = false
+            showPlans = false
+            showSearch = false
+            showNotifications = false
+            loginViewModel.selectUser(null)
+        }
+    }
+
     when (loginState) {
         is LoginState.Success -> {
             val currentUser = (loginState as LoginState.Success).user
@@ -116,6 +131,20 @@ fun AppNavigation(
             }
 
             val totalMessageTabCount = unreadConversationCount + pendingChatRequestCount
+
+            // Check for missing profile fields
+            val hasMissingFields = remember(currentUser) {
+                currentUser.bio.isNullOrBlank() ||
+                currentUser.age == null ||
+                currentUser.gender.isNullOrBlank() ||
+                currentUser.gotr.isNullOrBlank() ||
+                currentUser.caste.isNullOrBlank() ||
+                currentUser.category.isNullOrBlank() ||
+                currentUser.religion.isNullOrBlank() ||
+                currentUser.cityTown.isNullOrBlank() ||
+                currentUser.district.isNullOrBlank() ||
+                currentUser.state.isNullOrBlank()
+            }
 
             val profileIcon: @Composable () -> Unit = {
                 Box {
@@ -138,6 +167,26 @@ fun AppNavigation(
                         }
                     } else {
                         Icon(Icons.Filled.Person, contentDescription = "Profile")
+                    }
+
+                    if (hasMissingFields) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.error,
+                            shape = CircleShape,
+                            modifier = Modifier
+                                .size(16.dp)
+                                .align(Alignment.TopEnd)
+                                .offset(x = 6.dp, y = (-6).dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "!",
+                                    color = Color.White,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -221,6 +270,13 @@ fun AppNavigation(
                 SubscriptionDetailScreen(
                     modifier = modifier,
                     onBack = { showSubscriptionDetails = false },
+                    viewModel = loginViewModel
+                )
+            } else if (showDeleteProfile) {
+                BackHandler { showDeleteProfile = false }
+                DeleteProfileScreen(
+                    modifier = modifier,
+                    onBack = { showDeleteProfile = false },
                     viewModel = loginViewModel
                 )
             } else if (showHistory) {
@@ -329,6 +385,15 @@ fun AppNavigation(
                                             selected = false,
                                             onClick = { scope.launch { drawerState.close() } },
                                             icon = { Icon(Icons.Filled.Description, contentDescription = null) }
+                                        )
+                                        NavigationDrawerItem(
+                                            label = { Text("Delete Profile") },
+                                            selected = false,
+                                            onClick = {
+                                                scope.launch { drawerState.close() }
+                                                showDeleteProfile = true
+                                            },
+                                            icon = { Icon(Icons.Filled.DeleteForever, contentDescription = null) }
                                         )
                                         Spacer(modifier = Modifier.weight(1f))
                                         NavigationDrawerItem(

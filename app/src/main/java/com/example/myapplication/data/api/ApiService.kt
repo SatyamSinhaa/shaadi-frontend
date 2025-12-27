@@ -125,6 +125,9 @@ interface ApiService {
 
     @POST("api/users/{userId}/fcm-token")
     suspend fun updateFcmToken(@Path("userId") userId: Int, @Body body: Map<String, String>): Response<Unit>
+
+    @DELETE("api/users/{id}")
+    suspend fun deleteUser(@Path("id") id: Int): Response<Unit>
 }
 
 data class PhotoUpdateRequest(

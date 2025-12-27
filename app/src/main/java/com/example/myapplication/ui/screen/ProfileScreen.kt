@@ -36,6 +36,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.yalantis.ucrop.UCrop
@@ -231,17 +232,34 @@ fun ProfileView(
                         }
                     }
 
-                    IconButton(
-                        onClick = { onEditSection(EditSection.HEADER) },
+                    Box(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(4.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Edit,
-                            contentDescription = "Edit Name and Photo",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                        IconButton(
+                            onClick = { onEditSection(EditSection.HEADER) }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Edit,
+                                contentDescription = "Edit Name and Photo",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        
+                        // Added Warning Icon for Null Profile Photo
+                        if (user.photoUrl.isNullOrBlank()) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = "Missing Photo",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 6.dp, y = (-6).dp)
+                                    .background(Color.White, CircleShape)
+                            )
+                        }
                     }
                 }
             }
@@ -455,13 +473,14 @@ fun ProfileSection(
                             }
                             if (hasWarning) {
                                 Icon(
-                                    imageVector = Icons.Filled.Warning,
+                                    imageVector = Icons.Default.Warning,
                                     contentDescription = "Missing Information",
                                     tint = MaterialTheme.colorScheme.error,
                                     modifier = Modifier
-                                        .size(12.dp)
+                                        .size(16.dp)
                                         .align(Alignment.TopEnd)
-                                        .offset(x = 4.dp, y = (-4).dp)
+                                        .offset(x = 6.dp, y = (-6).dp)
+                                        .background(Color.White, CircleShape)
                                 )
                             }
                         }

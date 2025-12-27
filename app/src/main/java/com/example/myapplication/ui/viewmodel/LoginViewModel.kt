@@ -633,6 +633,47 @@ class LoginViewModel : ViewModel() {
             } catch (e: Exception) {}
         }
     }
+
+    fun deleteProfile(context: Context, userId: Int, password: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val user = (loginState.value as? LoginState.Success)?.user ?: return@launch
+
+                // First verify password by attempting login with user's email
+                val loginResponse = apiService.login(LoginDto(user.email, password))
+                if (!loginResponse.isSuccessful) {
+                    onError("Incorrect password")
+                    return@launch
+                }
+
+                // Delete photos from Supabase
+                try {
+                    // Delete profile photo
+                    user.photoUrl?.let { SupabaseConfig.deleteFile(it) }
+
+                    // Delete gallery photos
+                    user.photos.forEach { photo ->
+                        SupabaseConfig.deleteFile(photo.url)
+                    }
+                } catch (e: Exception) {
+                    Log.w("DeleteProfile", "Failed to delete some photos from Supabase: ${e.message}")
+                    // Continue with account deletion even if photo deletion fails
+                }
+
+                // Delete user from backend
+                val deleteResponse = apiService.deleteUser(userId)
+                if (deleteResponse.isSuccessful) {
+                    // Logout after successful deletion
+                    logout(context)
+                    onSuccess()
+                } else {
+                    onError("Failed to delete account")
+                }
+            } catch (e: Exception) {
+                onError("Error: ${e.message}")
+            }
+        }
+    }
 }
 
 sealed class LoginState {
