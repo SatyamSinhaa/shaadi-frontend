@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.api.RetrofitClient
+import com.example.myapplication.data.api.GoogleSignInHelper
 import com.example.myapplication.data.api.SupabaseConfig
 import com.example.myapplication.data.api.WebSocketMessage
 import com.example.myapplication.data.api.PhotoUpdateRequest
@@ -185,6 +186,91 @@ class LoginViewModel : ViewModel() {
         }
     }
 
+    fun loginWithGoogle(context: Context) {
+        viewModelScope.launch {
+            _loginState.value = LoginState.Loading
+            _messages.value = emptyList()
+
+            try {
+                val googleSignInHelper = GoogleSignInHelper(context)
+                val signInIntent = googleSignInHelper.getSignInIntent()
+                // Note: The actual sign-in result handling should be done in the Activity/Fragment
+                // This method just prepares the intent. The result will be handled separately.
+                _loginState.value = LoginState.Error("Google Sign-In requires UI interaction")
+            } catch (e: Exception) {
+                _loginState.value = LoginState.Error("Exception: ${e.message}")
+            }
+        }
+    }
+
+    fun handleGoogleSignInResult(context: Context, data: android.content.Intent?, onUserNotFound: (GoogleUserInfo) -> Unit, onIncompleteProfile: (User) -> Unit = {}) {
+        viewModelScope.launch {
+            Log.d("LoginViewModel", "Handling Google Sign-In result")
+            _loginState.value = LoginState.Loading
+            _messages.value = emptyList()
+
+            try {
+                val googleSignInHelper = GoogleSignInHelper(context)
+                Log.d("LoginViewModel", "Created GoogleSignInHelper, calling handleSignInResult")
+                val (idToken, account) = googleSignInHelper.handleSignInResult(data)
+                Log.d("LoginViewModel", "ID Token result: ${idToken?.let { "obtained" } ?: "null"}")
+
+                if (idToken != null && account != null) {
+                    Log.d("LoginViewModel", "Calling firebase login API")
+                    val response = apiService.firebaseLogin(mapOf("idToken" to idToken))
+                    Log.d("LoginViewModel", "API response: ${response.isSuccessful}, code: ${response.code()}")
+                    if (response.isSuccessful) {
+                        response.body()?.let { user ->
+                            Log.d("LoginViewModel", "Login successful for user: ${user.name} (${user.id})")
+
+                            // If user has Firebase UID (registered with Google before), login directly
+                            if (user.firebaseUid != null) {
+                                Log.d("LoginViewModel", "Google user exists, logging in directly")
+                                _loginState.value = LoginState.Success(user)
+                                saveUserId(context, user.id)
+                                // Note: For Google users, we don't save email/password
+                                // They authenticate via Firebase each time
+                                webSocketManager.connect(user.id)
+                                fetchSubscription(user.id)
+                                fetchAllUsers()
+                                fetchMessages(user.id)
+                                fetchChatRequests(user.id)
+                            } else {
+                                // New user - redirect to registration
+                                Log.d("LoginViewModel", "New user, redirecting to registration")
+                                onIncompleteProfile(user)
+                            }
+                        }
+                    } else {
+                        val errorBody = response.errorBody()?.string()
+                        Log.e("LoginViewModel", "Firebase login failed: ${response.code()}, body: $errorBody")
+
+                        // Check if it's a USER_NOT_FOUND error
+                        if (errorBody?.contains("USER_NOT_FOUND") == true) {
+                            Log.d("LoginViewModel", "User not found, extracting Google user info")
+                            // Extract Google user info from the account
+                            val googleUserInfo = GoogleUserInfo(
+                                firebaseUid = account.id ?: "",
+                                email = account.email ?: "",
+                                name = account.displayName ?: "",
+                                idToken = idToken
+                            )
+                            onUserNotFound(googleUserInfo)
+                        } else {
+                            _loginState.value = LoginState.Error("Firebase login failed: ${response.code()}")
+                        }
+                    }
+                } else {
+                    Log.e("LoginViewModel", "Google Sign-In failed - no ID token or account")
+                    _loginState.value = LoginState.Error("Google Sign-In failed")
+                }
+            } catch (e: Exception) {
+                Log.e("LoginViewModel", "Exception in Google Sign-In: ${e.message}", e)
+                _loginState.value = LoginState.Error("Exception: ${e.message}")
+            }
+        }
+    }
+
     private fun saveUserId(context: Context, userId: Int) {
         val prefs = getSharedPreferences(context)
         prefs.edit().putInt(KEY_USER_ID, userId).apply()
@@ -215,67 +301,19 @@ class LoginViewModel : ViewModel() {
                 val publicUrl = "https://${SupabaseConfig.PROJECT_ID}.supabase.co/storage/v1/object/public/$encodedBucketName/$fileName"
 
                 val response = apiService.updateProfilePhoto(userId, PhotoUpdateRequest(userId, publicUrl))
-                
-                if (response.isSuccessful) {
-                    // Refetch user by ID to trigger navigation correctly if needed
-                    val userResponse = apiService.getUserById(userId)
-                    if (userResponse.isSuccessful) {
-                        userResponse.body()?.let { updatedUser ->
-                            val currentState = _loginState.value
-                            if (currentState is LoginState.Success && currentState.user.id == userId) {
-                                _loginState.value = LoginState.Success(updatedUser)
-                            }
+
+                val userResponse = apiService.getUserById(userId)
+                if (userResponse.isSuccessful) {
+                    userResponse.body()?.let { updatedUser ->
+                        val currentState = _loginState.value
+                        if (currentState is LoginState.Success && currentState.user.id == userId) {
+                            _loginState.value = LoginState.Success(updatedUser)
                         }
                     }
-                    
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Profile photo updated!", Toast.LENGTH_SHORT).show()
-                    }
                 }
-            } catch (e: Exception) {
-                Log.e("Upload", "Error during upload/sync: ${e.message}", e)
+
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Upload failed: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-    }
-
-    fun uploadGalleryPhoto(context: Context, uri: Uri, userId: Int) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Adding to gallery...", Toast.LENGTH_SHORT).show()
-                }
-                
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                if (bytes == null) return@launch
-                
-                val fileName = "gallery_${userId}_${UUID.randomUUID()}.jpg"
-                val bucketName = SupabaseConfig.BUCKET_NAME
-                val bucket = SupabaseConfig.supabase.storage.from(bucketName)
-                
-                bucket.upload(fileName, bytes)
-
-                val encodedBucketName = bucketName.replace(" ", "%20")
-                val publicUrl = "https://${SupabaseConfig.PROJECT_ID}.supabase.co/storage/v1/object/public/$encodedBucketName/$fileName"
-
-                val response = apiService.addPhotoToGallery(userId, mapOf("photoUrl" to publicUrl))
-                
-                if (response.isSuccessful) {
-                     val userResponse = apiService.getUserById(userId)
-                     if (userResponse.isSuccessful) {
-                         userResponse.body()?.let { updatedUser ->
-                             val currentState = _loginState.value
-                             if (currentState is LoginState.Success && currentState.user.id == userId) {
-                                 _loginState.value = LoginState.Success(updatedUser)
-                             }
-                         }
-                     }
-                     
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Photo added to gallery!", Toast.LENGTH_SHORT).show()
-                    }
+                    Toast.makeText(context, "Profile photo updated!", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 Log.e("Upload", "Gallery upload failed", e)
@@ -306,6 +344,20 @@ class LoginViewModel : ViewModel() {
                 if (response.isSuccessful) {
                     response.body()?.let { updatedUser ->
                         _loginState.value = LoginState.Success(updatedUser)
+                    }
+                }
+            } catch (e: Exception) {}
+        }
+    }
+
+    fun updateUserDuringRegistration(user: User, onSuccess: (User) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val response: Response<User> = apiService.updateUser(user.id, user)
+                if (response.isSuccessful) {
+                    response.body()?.let { updatedUser ->
+                        // Don't trigger login state change during registration
+                        onSuccess(updatedUser)
                     }
                 }
             } catch (e: Exception) {}
@@ -528,8 +580,60 @@ class LoginViewModel : ViewModel() {
         }
     }
 
+    fun registerWithGoogleAndSaveUID(googleUserInfo: GoogleUserInfo, name: String, email: String, gender: String, onSuccess: (User) -> Unit) {
+        _registerState.value = LoginState.Loading
+        viewModelScope.launch {
+            try {
+                // For Google users, we need to register and then link the Firebase UID
+                // First register normally
+                val response: Response<User> = apiService.register(RegisterDto(email, "google_auth_placeholder", name, gender))
+                if (response.isSuccessful) {
+                response.body()?.let { user ->
+                    Log.d("LoginViewModel", "User registered successfully, now linking Firebase UID: ${googleUserInfo.firebaseUid}")
+                    // Ensure photos is not null before copying
+                    val safeUser = user.copy(photos = user.photos ?: emptyList())
+                    Log.d("LoginViewModel", "Safe user created, updating with Firebase UID")
+                    // Now update the user with Firebase UID
+                    val userWithFirebase = safeUser.copy(firebaseUid = googleUserInfo.firebaseUid)
+                    Log.d("LoginViewModel", "Calling updateUser API for user ${user.id}")
+                    val updateResponse: Response<User> = apiService.updateUser(safeUser.id, userWithFirebase)
+                    Log.d("LoginViewModel", "Update response: ${updateResponse.isSuccessful}, code: ${updateResponse.code()}")
+                    if (updateResponse.isSuccessful) {
+                        updateResponse.body()?.let { finalUser ->
+                            Log.d("LoginViewModel", "Firebase UID linked successfully: ${finalUser.firebaseUid}")
+                            _registerState.value = LoginState.Success(finalUser)
+                            onSuccess(finalUser)
+                        }
+                    } else {
+                        val errorBody = updateResponse.errorBody()?.string()
+                        Log.e("LoginViewModel", "Failed to link Google account: ${updateResponse.code()}, body: $errorBody")
+                        _registerState.value = LoginState.Error("Failed to link Google account: ${updateResponse.code()}")
+                    }
+                }
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    Log.e("LoginViewModel", "Registration failed: ${response.code()}, body: $errorBody")
+                    _registerState.value = LoginState.Error("Registration failed: ${response.code()}")
+                }
+            } catch (e: Exception) {
+                Log.e("LoginViewModel", "Exception in Google registration: ${e.message}", e)
+                _registerState.value = LoginState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+
     fun clearSendMessageError() {
         _sendMessageError.value = null
+    }
+
+    fun setLoggedInUser(user: User) {
+        _loginState.value = LoginState.Success(user)
+        // Initialize user data like WebSocket connection, etc.
+        webSocketManager.connect(user.id)
+        fetchSubscription(user.id)
+        fetchAllUsers()
+        fetchMessages(user.id)
+        fetchChatRequests(user.id)
     }
 
     fun markMessagesAsRead(receiverId: Int, senderId: Int) {
@@ -634,6 +738,54 @@ class LoginViewModel : ViewModel() {
         }
     }
 
+    fun uploadGalleryPhoto(context: Context, uri: Uri, userId: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Adding photo to gallery...", Toast.LENGTH_SHORT).show()
+                }
+
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                if (bytes == null) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Error reading image file", Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+
+                val fileName = "gallery_${userId}_${UUID.randomUUID()}.jpg"
+                val bucketName = SupabaseConfig.BUCKET_NAME
+                val bucket = SupabaseConfig.supabase.storage.from(bucketName)
+
+                bucket.upload(fileName, bytes)
+
+                val encodedBucketName = bucketName.replace(" ", "%20")
+                val publicUrl = "https://${SupabaseConfig.PROJECT_ID}.supabase.co/storage/v1/object/public/$encodedBucketName/$fileName"
+
+                val response = apiService.addPhotoToGallery(userId, mapOf("photoUrl" to publicUrl))
+
+                val userResponse = apiService.getUserById(userId)
+                if (userResponse.isSuccessful) {
+                    userResponse.body()?.let { updatedUser ->
+                        val currentState = _loginState.value
+                        if (currentState is LoginState.Success && currentState.user.id == userId) {
+                            _loginState.value = LoginState.Success(updatedUser)
+                        }
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Photo added to gallery!", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.e("Upload", "Gallery upload failed", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Gallery upload failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     fun deleteProfile(context: Context, userId: Int, password: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
         viewModelScope.launch {
             try {
@@ -675,6 +827,13 @@ class LoginViewModel : ViewModel() {
         }
     }
 }
+
+data class GoogleUserInfo(
+    val firebaseUid: String,
+    val email: String,
+    val name: String,
+    val idToken: String
+)
 
 sealed class LoginState {
     object Idle : LoginState()

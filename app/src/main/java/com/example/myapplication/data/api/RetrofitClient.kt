@@ -8,10 +8,10 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
     // Production backend
-    private const val BASE_URL = "https://shaadi-backend-g6od.onrender.com/"
+//    private const val BASE_URL = "https://shaadi-backend-g6od.onrender.com/"
 
 //     Local backend
-//    private const val BASE_URL = "http://10.0.2.2:8080/"
+    private const val BASE_URL = "http://10.0.2.2:8080/"
 
 //     development backend
 //    private const val BASE_URL = "https://shaadi-backend-development.onrender.com/"

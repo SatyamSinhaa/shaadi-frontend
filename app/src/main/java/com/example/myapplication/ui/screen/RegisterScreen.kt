@@ -20,7 +20,7 @@ import androidx.compose.material.icons.filled.LocationOn
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RegisterScreen(modifier: Modifier = Modifier, onBackToLogin: (String) -> Unit, onRegisterSuccess: (User) -> Unit, viewModel: LoginViewModel = viewModel()) {
+fun RegisterScreen(modifier: Modifier = Modifier, onBackToLogin: (String) -> Unit, onRegisterSuccess: (User) -> Unit, viewModel: LoginViewModel = viewModel(), googleUserInfo: com.example.myapplication.ui.viewmodel.GoogleUserInfo? = null, existingUser: User? = null) {
     // State to manage the current step
     var currentStep by remember { mutableStateOf(0) }
     val steps = listOf("Account", "Personal", "Location")
@@ -32,7 +32,7 @@ fun RegisterScreen(modifier: Modifier = Modifier, onBackToLogin: (String) -> Uni
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var gender by remember { mutableStateOf("") }
-    
+
     // Step 2: Personal Details
     var age by remember { mutableStateOf("") }
     var caste by remember { mutableStateOf("") }
@@ -48,11 +48,44 @@ fun RegisterScreen(modifier: Modifier = Modifier, onBackToLogin: (String) -> Uni
     val registerState by viewModel.registerState.collectAsState()
     var registeredUser by remember { mutableStateOf<User?>(null) }
 
+    // Pre-fill data from Google user or existing user
+    LaunchedEffect(googleUserInfo, existingUser) {
+        if (existingUser != null) {
+            // Existing user with incomplete profile - pre-fill all available data
+            registeredUser = existingUser
+            name = existingUser.name
+            email = existingUser.email
+            gender = existingUser.gender ?: ""
+            age = existingUser.age?.toString() ?: ""
+            caste = existingUser.caste ?: ""
+            gotr = existingUser.gotr ?: ""
+            category = existingUser.category ?: ""
+            religion = existingUser.religion ?: ""
+            cityTown = existingUser.cityTown ?: ""
+            district = existingUser.district ?: ""
+            state = existingUser.state ?: ""
+
+            // Determine which step to start from based on missing data
+            currentStep = when {
+                existingUser.cityTown.isNullOrBlank() || existingUser.state.isNullOrBlank() -> 2 // Location missing
+                existingUser.age == null || existingUser.religion.isNullOrBlank() -> 1 // Personal missing
+                else -> 0 // All basic info present, but profile incomplete
+            }
+        } else if (googleUserInfo != null) {
+            // New Google user
+            name = googleUserInfo.name
+            email = googleUserInfo.email
+            password = "google_auth_placeholder" // Placeholder, won't be used
+        }
+    }
+
     // Handle registration result
     LaunchedEffect(registerState) {
         if (registerState is LoginState.Success) {
             val user = (registerState as LoginState.Success).user
-            registeredUser = user
+            // Ensure photos is not null
+            val safeUser = user.copy(photos = user.photos ?: emptyList())
+            registeredUser = safeUser
             // Move to next step only if we are at step 0 (Register)
             if (currentStep == 0) {
                 currentStep = 1
@@ -150,9 +183,20 @@ fun RegisterScreen(modifier: Modifier = Modifier, onBackToLogin: (String) -> Uni
                     Spacer(modifier = Modifier.height(32.dp))
 
                     Button(
-                        onClick = { viewModel.register(name, email, password, gender) },
+                        onClick = {
+                            if (googleUserInfo != null) {
+                                // For Google users, save Firebase UID immediately after Step 1
+                                viewModel.registerWithGoogleAndSaveUID(googleUserInfo, name, email, gender) { user ->
+                                    // User is now registered with Firebase UID saved
+                                    registeredUser = user
+                                    currentStep = 1
+                                }
+                            } else {
+                                viewModel.register(name, email, password, gender)
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = name.isNotBlank() && email.isNotBlank() && password.isNotBlank() && gender.isNotBlank() && registerState !is LoginState.Loading
+                        enabled = name.isNotBlank() && email.isNotBlank() && gender.isNotBlank() && registerState !is LoginState.Loading
                     ) {
                         if (registerState is LoginState.Loading) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
@@ -196,15 +240,19 @@ fun RegisterScreen(modifier: Modifier = Modifier, onBackToLogin: (String) -> Uni
                                     caste = caste.takeIf { it.isNotBlank() },
                                     gotr = gotr.takeIf { it.isNotBlank() },
                                     category = category.takeIf { it.isNotBlank() },
-                                    religion = religion.takeIf { it.isNotBlank() }
+                                    religion = religion.takeIf { it.isNotBlank() },
+                                    photos = user.photos // Preserve existing photos
                                 )
-                                viewModel.updateUser(updatedUser)
-                                registeredUser = updatedUser
-                                currentStep = 2
+                                viewModel.updateUserDuringRegistration(updatedUser) { savedUser ->
+                                    registeredUser = savedUser
+                                    currentStep = 2 // Go to Location tab
+                                    // Debug: Print current step
+                                    println("DEBUG: Moving to Location tab (Step 2)")
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = age.isNotBlank() // Minimal validation, can be extended
+                        enabled = age.isNotBlank() && religion.isNotBlank() // Require both age and religion
                     ) {
                         Text("Next")
                     }
@@ -224,11 +272,13 @@ fun RegisterScreen(modifier: Modifier = Modifier, onBackToLogin: (String) -> Uni
 
                     Button(
                         onClick = {
+                            println("DEBUG: Complete Registration button clicked")
                             registeredUser?.let { user ->
                                 val updatedUser = user.copy(
                                     cityTown = cityTown.takeIf { it.isNotBlank() },
                                     district = district.takeIf { it.isNotBlank() },
-                                    state = state.takeIf { it.isNotBlank() }
+                                    state = state.takeIf { it.isNotBlank() },
+                                    photos = user.photos // Preserve existing photos
                                 )
                                 viewModel.updateUser(updatedUser)
                                 onRegisterSuccess(updatedUser) // Final completion

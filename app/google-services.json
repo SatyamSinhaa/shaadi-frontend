@@ -1,26 +1,44 @@
 {
   "project_info": {
-    "project_number": "414111545334",
-    "project_id": "matching-7852c",
-    "storage_bucket": "matching-7852c.firebasestorage.app"
+    "project_number": "305204559366",
+    "project_id": "hamar-jodi",
+    "storage_bucket": "hamar-jodi.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:414111545334:android:a585d8323fb5fbfac839d7",
+        "mobilesdk_app_id": "1:305204559366:android:8742ad7301cde0ee750d87",
         "android_client_info": {
           "package_name": "com.example.myapplication"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "305204559366-m7lu1e216h3fp8bsdohbv8sf8aelksa8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.myapplication",
+            "certificate_hash": "1f450af34412bae254412dd231189fa59a81f28a"
+          }
+        },
+        {
+          "client_id": "305204559366-avns077q8ck2ab5ddsapdrs48g3mk467.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyBZJW2DMd0vkrvY-b6pLWXktcKOvJnP6Kk"
+          "current_key": "AIzaSyB9sp7FJuYxY3l3NxVK-gDem651YRLQ4ys"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "305204559366-avns077q8ck2ab5ddsapdrs48g3mk467.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

@@ -19,11 +19,12 @@ import androidx.compose.runtime.LaunchedEffect
 
 @Composable
 fun LoginScreen(
-    modifier: Modifier = Modifier, 
-    onRegisterClick: () -> Unit, 
-    viewModel: LoginViewModel = viewModel(), 
-    registrationSuccessMessage: String? = null, 
-    onMessageShown: () -> Unit = {}
+    modifier: Modifier = Modifier,
+    onRegisterClick: () -> Unit,
+    viewModel: LoginViewModel = viewModel(),
+    registrationSuccessMessage: String? = null,
+    onMessageShown: () -> Unit = {},
+    onGoogleSignInClick: () -> Unit = {}
 ) {
     var email by remember { mutableStateOf("ananya@gmail.com") }
     var password by remember { mutableStateOf("123") }
@@ -97,6 +98,20 @@ fun LoginScreen(
                 } else {
                     Text("Login")
                 }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Google Sign-In Button
+            Button(
+                onClick = onGoogleSignInClick,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                )
+            ) {
+                Text("Sign in with Google")
             }
 
             Spacer(modifier = Modifier.height(16.dp))

@@ -22,6 +22,9 @@ interface ApiService {
     @POST("api/users/login")
     suspend fun login(@Body loginDto: LoginDto): Response<User>
 
+    @POST("api/users/firebase-login")
+    suspend fun firebaseLogin(@Body body: Map<String, String>): Response<User>
+
     @GET("api/users")
     suspend fun getAllUsers(
         @Query("gender") gender: String? = null,

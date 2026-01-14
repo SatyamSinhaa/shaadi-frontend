@@ -81,6 +81,8 @@ fun AppNavigation(
     var showBlockedProfiles by remember { mutableStateOf(false) }
     var showSubscriptionDetails by remember { mutableStateOf(false) }
     var showDeleteProfile by remember { mutableStateOf(false) }
+    var googleUserInfo by remember { mutableStateOf<com.example.myapplication.ui.viewmodel.GoogleUserInfo?>(null) }
+    var existingUser by remember { mutableStateOf<User?>(null) }
     val context = LocalContext.current
 
     // State for Search in Messages
@@ -545,10 +547,62 @@ fun AppNavigation(
                 }
             }
 
+            // Google Sign-In launcher
+            val googleSignInLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                Log.d("GoogleSignIn", "Result code: ${result.resultCode}, data: ${result.data}")
+                // Handle Google Sign-In result regardless of result code
+                // Google Sign-In may not return RESULT_OK
+                loginViewModel.handleGoogleSignInResult(context, result.data,
+                    onUserNotFound = { googleUser ->
+                        // New user or incomplete profile - redirect to registration
+                        googleUserInfo = googleUser
+                        showRegister = true
+                    },
+                    onIncompleteProfile = { user ->
+                        // Existing user with incomplete profile - redirect to continue registration
+                        existingUser = user
+                        googleUserInfo = null // Clear googleUserInfo since this is an existing user
+                        showRegister = true
+                    }
+                )
+            }
+
             if (showRegister) {
-                RegisterScreen(modifier = modifier, onBackToLogin = { registrationSuccessMessage = it; showRegister = false }, onRegisterSuccess = { user -> registeredUser = user; showRegister = false; registrationSuccessMessage = "Registration complete. Please Login." })
+                RegisterScreen(
+                    modifier = modifier,
+                    onBackToLogin = { registrationSuccessMessage = it; showRegister = false; googleUserInfo = null; existingUser = null },
+                    onRegisterSuccess = { user ->
+                        registeredUser = user
+                        showRegister = false
+                        googleUserInfo = null
+                        existingUser = null
+
+                        // For Google users, automatically log them in after registration
+                        if (user.firebaseUid != null) {
+                            // This is a Google user, log them in directly
+                            loginViewModel.setLoggedInUser(user)
+                            Log.d("MainActivity", "Google user registered and logged in automatically")
+                        } else {
+                            // Regular user, show success message
+                            registrationSuccessMessage = "Registration complete. Please Login."
+                        }
+                    },
+                    googleUserInfo = googleUserInfo,
+                    existingUser = existingUser
+                )
             } else {
-                LoginScreen(modifier = modifier, onRegisterClick = { showRegister = true }, registrationSuccessMessage = registrationSuccessMessage, onMessageShown = { registrationSuccessMessage = null })
+                LoginScreen(
+                    modifier = modifier,
+                    onRegisterClick = { showRegister = true },
+                    registrationSuccessMessage = registrationSuccessMessage,
+                    onMessageShown = { registrationSuccessMessage = null },
+                    onGoogleSignInClick = {
+                        val googleSignInHelper = com.example.myapplication.data.api.GoogleSignInHelper(context)
+                        googleSignInLauncher.launch(googleSignInHelper.getSignInIntent())
+                    }
+                )
             }
         }
     }

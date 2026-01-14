@@ -67,6 +67,8 @@ dependencies {
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-messaging-ktx")
+    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
 
     // RxJava for STOMP WebSocket client
     implementation("io.reactivex.rxjava2:rxjava:2.2.21")
