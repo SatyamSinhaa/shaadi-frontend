@@ -51,7 +51,14 @@ fun UserListScreen(
     val currentUserId = (loginState as? LoginState.Success)?.user?.id
     val filteredUsers = users.filter { it.id != currentUserId }
 
-    val pagerState = rememberPagerState(pageCount = { filteredUsers.size })
+    val shuffledUsers = remember { mutableStateOf<List<User>>(emptyList()) }
+
+    // Shuffle users when filteredUsers changes
+    LaunchedEffect(filteredUsers) {
+        shuffledUsers.value = filteredUsers.shuffled()
+    }
+
+    val pagerState = rememberPagerState(pageCount = { shuffledUsers.value.size })
 
     // Fetch favourites and chat requests when screen loads or user logs in
     LaunchedEffect(currentUserId) {
@@ -86,7 +93,7 @@ fun UserListScreen(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize()
             ) { page ->
-                val targetUser = filteredUsers[page]
+                val targetUser = shuffledUsers.value[page]
                 val isFavourite = favourites.any { it.favouritedUser.id == targetUser.id }
                 
                 // Determine chat status

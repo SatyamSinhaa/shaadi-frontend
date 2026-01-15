@@ -81,11 +81,8 @@ fun HomeScreen(
                     ) {
                         Text("|| जय जोहार ||", color = Color.White, fontSize = 16.sp)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("मोर जोड़ी", color = Color.Yellow, fontSize = 40.sp, fontWeight = FontWeight.Bold)
+                        Text("हमर जोड़ी", color = Color.Yellow, fontSize = 40.sp, fontWeight = FontWeight.Bold)
                         Text("मा आपमन के स्वागत हे", color = Color.White, fontSize = 20.sp)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("हर समाज, हर समुदाय मन बर खास सुविधा के साथ।", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
-                        Text("अपन जोड़ीदार खोजव अपन मनपसंद ते।", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
                     }
                     // Image placeholder on right could be added here
                 }
