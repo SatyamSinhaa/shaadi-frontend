@@ -98,7 +98,6 @@ fun ProfileScreen(
                     user = user,
                     subscription = subscription,
                     onEditSection = { section -> currentEditSection = section },
-                    onLogout = { viewModel.logout(context) },
                     onPhotoClick = { if (user.photoUrl != null) showEnlargedPhoto = true },
                     onAddGalleryPhoto = { uri, context -> viewModel.uploadGalleryPhoto(context, uri, user.id) }
                 )
@@ -158,7 +157,6 @@ fun ProfileView(
     user: User,
     subscription: com.example.myapplication.data.model.Subscription? = null,
     onEditSection: (EditSection) -> Unit,
-    onLogout: () -> Unit,
     onPhotoClick: () -> Unit = {},
     onAddGalleryPhoto: (Uri, Context) -> Unit
 ) {
@@ -342,22 +340,7 @@ fun ProfileView(
                         ProfileField(label = "State", value = user.state)
                     }
                     
-                    Spacer(modifier = Modifier.height(24.dp))
 
-                    // Action Buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onLogout,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Filled.ExitToApp, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Logout")
-                        }
-                    }
                 }
                 1 -> {
                     // Photos Tab
@@ -378,21 +361,23 @@ fun ProfileView(
                         // Add Photo Button
                         Button(
                             onClick = { 
-                                galleryLauncher.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                )
+                                // galleryLauncher.launch(
+                                //     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                // )
                             },
+                            enabled = false, // Disable the button
                             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
                         ) {
                             Icon(Icons.Filled.Add, contentDescription = "Add Photo")
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Add Photo")
                         }
+                        Text("Coming Soon", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                         // Photos Grid
                         if (user.photos.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                                Text("No Additional Photos", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         } else {
                             // Simple Grid Implementation

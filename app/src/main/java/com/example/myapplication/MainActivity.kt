@@ -83,6 +83,7 @@ fun AppNavigation(
     var showDeleteProfile by remember { mutableStateOf(false) }
     var googleUserInfo by remember { mutableStateOf<com.example.myapplication.ui.viewmodel.GoogleUserInfo?>(null) }
     var existingUser by remember { mutableStateOf<User?>(null) }
+    var hasLandedAfterLogin by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     // State for Search in Messages
@@ -104,15 +105,34 @@ fun AppNavigation(
         Triple("Profile", null, 3)
     )
 
-    // Handle Landing Screen after Login
+    // Auto-login on app start
+    LaunchedEffect(Unit) {
+        if (loginState is LoginState.Idle) {
+            // Try auto-login for regular users
+            if (loginViewModel.isLoggedIn(context)) {
+                loginViewModel.tryAutoLogin(context)
+            } else {
+                // Check if user has a saved user ID (might be a Google user)
+                val prefs = context.getSharedPreferences("shaadi_prefs", android.content.Context.MODE_PRIVATE)
+                val savedUserId = prefs.getInt("user_id", -1)
+                if (savedUserId != -1) {
+                    // Try to restore user session
+                    loginViewModel.restoreUserSession(savedUserId)
+                }
+            }
+        }
+    }
+
+    // Handle Landing Screen after Login - only on first login, not on profile updates
     LaunchedEffect(loginState) {
-        if (loginState is LoginState.Success) {
+        if (loginState is LoginState.Success && !hasLandedAfterLogin) {
             selectedTab = 0 // Landing on Home Screen
             showFavourites = false
             showPlans = false
             showSearch = false
             showNotifications = false
             loginViewModel.selectUser(null)
+            hasLandedAfterLogin = true
         }
     }
 
@@ -403,6 +423,7 @@ fun AppNavigation(
                                             selected = false,
                                             onClick = {
                                                 scope.launch { drawerState.close() }
+                                                hasLandedAfterLogin = false // Reset for next login
                                                 loginViewModel.logout(context)
                                             },
                                             icon = { Icon(Icons.Default.ExitToApp, contentDescription = null) }
@@ -541,11 +562,6 @@ fun AppNavigation(
             }
         }
         else -> {
-            LaunchedEffect(Unit) {
-                if (loginViewModel.isLoggedIn(context)) {
-                    loginViewModel.tryAutoLogin(context)
-                }
-            }
 
             // Google Sign-In launcher
             val googleSignInLauncher = rememberLauncherForActivityResult(
@@ -598,8 +614,10 @@ fun AppNavigation(
                     onRegisterClick = { showRegister = true },
                     registrationSuccessMessage = registrationSuccessMessage,
                     onMessageShown = { registrationSuccessMessage = null },
-                    onGoogleSignInClick = {
+            onGoogleSignInClick = {
                         val googleSignInHelper = com.example.myapplication.data.api.GoogleSignInHelper(context)
+                        // Force account selection by clearing any cached sign-in state
+                        googleSignInHelper.signOut()
                         googleSignInLauncher.launch(googleSignInHelper.getSignInIntent())
                     }
                 )

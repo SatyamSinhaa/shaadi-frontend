@@ -440,11 +440,16 @@ class LoginViewModel : ViewModel() {
 
     fun logout(context: Context) {
         clearSavedCredentials(context)
+        clearSavedUserId(context) // Also clear user ID to prevent auto-login
         webSocketManager.disconnect()
         _loginState.value = LoginState.Idle
         _users.value = emptyList()
         _messages.value = emptyList()
         _subscription.value = null
+    }
+
+    fun resetLoginState() {
+        _loginState.value = LoginState.Idle
     }
 
     private fun getSharedPreferences(context: Context): SharedPreferences {
@@ -473,6 +478,13 @@ class LoginViewModel : ViewModel() {
             .remove(KEY_USER_EMAIL)
             .remove(KEY_USER_PASSWORD)
             .putBoolean(KEY_IS_LOGGED_IN, false)
+            .apply()
+    }
+
+    private fun clearSavedUserId(context: Context) {
+        val prefs = getSharedPreferences(context)
+        prefs.edit()
+            .remove(KEY_USER_ID)
             .apply()
     }
 
@@ -546,6 +558,30 @@ class LoginViewModel : ViewModel() {
             } catch (e: Exception) {
             } finally {
                 _userProfileLoading.value = false
+            }
+        }
+    }
+
+    fun restoreUserSession(userId: Int) {
+        viewModelScope.launch {
+            try {
+                val response = apiService.getUserById(userId)
+                if (response.isSuccessful) {
+                    response.body()?.let { user ->
+                        // Restore the user session like after login
+                        _loginState.value = LoginState.Success(user)
+                        webSocketManager.connect(user.id)
+                        fetchSubscription(user.id)
+                        fetchAllUsers()
+                        fetchMessages(user.id)
+                        fetchChatRequests(user.id)
+                        Log.d("LoginViewModel", "User session restored for: ${user.name} (${user.id})")
+                    }
+                } else {
+                    Log.e("LoginViewModel", "Failed to restore user session: ${response.code()}")
+                }
+            } catch (e: Exception) {
+                Log.e("LoginViewModel", "Exception restoring user session", e)
             }
         }
     }
