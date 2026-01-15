@@ -649,20 +649,6 @@ fun SectionEditForm(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Select from Gallery")
                         }
-                        
-                        Text(
-                            text = "Or enter URL manually:",
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                        
-                        OutlinedTextField(
-                            value = photoUrl,
-                            onValueChange = { photoUrl = it },
-                            label = { Text("Photo URL") },
-                            modifier = Modifier.fillMaxWidth(),
-                            textStyle = MaterialTheme.typography.bodySmall
-                        )
                     }
                 }
             }

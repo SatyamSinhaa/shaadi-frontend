@@ -131,9 +131,19 @@ interface ApiService {
 
     @DELETE("api/users/{id}")
     suspend fun deleteUser(@Path("id") id: Int): Response<Unit>
+
+    @POST("api/users/upload-url")
+    suspend fun getUploadUrl(@Body body: Map<String, String>): Response<Map<String, String>>
+
+    @DELETE("api/users/delete-file")
+    suspend fun deleteFile(@Body body: Map<String, String>): Response<Map<String, String>>
 }
 
 data class PhotoUpdateRequest(
-    val userId: Int,
     val photoUrl: String
+)
+
+data class UploadUrlRequest(
+    val fileName: String,
+    val contentType: String
 )

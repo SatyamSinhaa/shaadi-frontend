@@ -9,7 +9,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.api.RetrofitClient
 import com.example.myapplication.data.api.GoogleSignInHelper
-import com.example.myapplication.data.api.SupabaseConfig
 import com.example.myapplication.data.api.WebSocketMessage
 import com.example.myapplication.data.api.PhotoUpdateRequest
 import com.example.myapplication.data.model.ChatRequest
@@ -21,7 +20,7 @@ import com.example.myapplication.data.model.Notification
 import com.example.myapplication.data.model.RegisterDto
 import com.example.myapplication.data.model.Subscription
 import com.example.myapplication.data.model.User
-import io.github.jan.supabase.storage.storage
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +28,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.Response
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -282,7 +283,12 @@ class LoginViewModel : ViewModel() {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "Uploading photo...", Toast.LENGTH_SHORT).show()
                 }
-                
+
+                // Get current user's photo URL for cleanup later
+                val currentUser = (loginState.value as? LoginState.Success)?.user
+                val oldPhotoUrl = currentUser?.photoUrl
+                Log.d("Upload", "Current user photoUrl before upload: $oldPhotoUrl")
+
                 val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                 if (bytes == null) {
                     withContext(Dispatchers.Main) {
@@ -290,17 +296,67 @@ class LoginViewModel : ViewModel() {
                     }
                     return@launch
                 }
-                
+
+                // 1. Generate unique filename
                 val fileName = "profile_${userId}_${UUID.randomUUID()}.jpg"
-                val bucketName = SupabaseConfig.BUCKET_NAME
-                val bucket = SupabaseConfig.supabase.storage.from(bucketName)
-                
-                bucket.upload(fileName, bytes)
 
-                val encodedBucketName = bucketName.replace(" ", "%20")
-                val publicUrl = "https://${SupabaseConfig.PROJECT_ID}.supabase.co/storage/v1/object/public/$encodedBucketName/$fileName"
+                // 2. Request signed upload URL from backend
+                val uploadUrlResponse = apiService.getUploadUrl(mapOf(
+                    "fileName" to fileName,
+                    "contentType" to "image/jpeg"
+                ))
 
-                val response = apiService.updateProfilePhoto(userId, PhotoUpdateRequest(userId, publicUrl))
+                if (!uploadUrlResponse.isSuccessful) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Failed to get upload URL", Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+
+                val urls = uploadUrlResponse.body()
+                if (urls == null) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Invalid upload URL response", Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+
+                val signedUrl = urls["uploadUrl"]
+                val viewUrl = urls["viewUrl"]
+
+                if (signedUrl == null || viewUrl == null) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Missing upload URLs", Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+
+                // 3. Upload directly to signed URL
+                val uploadRequest = okhttp3.Request.Builder()
+                    .url(signedUrl)
+                    .put(bytes.toRequestBody("image/jpeg".toMediaType()))
+                    .build()
+
+                val client = okhttp3.OkHttpClient()
+                val uploadResponse = client.newCall(uploadRequest).execute()
+
+                if (!uploadResponse.isSuccessful) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Upload failed: ${uploadResponse.code}", Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+
+                // 4. Save the view URL to database (this will also handle deleting old photo)
+                val response = apiService.updateProfilePhoto(userId, PhotoUpdateRequest(viewUrl))
+
+                if (!response.isSuccessful) {
+                    Log.e("Upload", "Failed to update profile photo URL: ${response.code()} - ${response.errorBody()?.string()}")
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Failed to save photo URL to database", Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
 
                 val userResponse = apiService.getUserById(userId)
                 if (userResponse.isSuccessful) {
@@ -310,15 +366,17 @@ class LoginViewModel : ViewModel() {
                             _loginState.value = LoginState.Success(updatedUser)
                         }
                     }
+                } else {
+                    Log.e("Upload", "Failed to fetch updated user: ${userResponse.code()}")
                 }
 
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "Profile photo updated!", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                Log.e("Upload", "Gallery upload failed", e)
+                Log.e("Upload", "Profile upload failed", e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Gallery upload failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Profile upload failed: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -753,16 +811,58 @@ class LoginViewModel : ViewModel() {
                     return@launch
                 }
 
+                // 1. Generate unique filename
                 val fileName = "gallery_${userId}_${UUID.randomUUID()}.jpg"
-                val bucketName = SupabaseConfig.BUCKET_NAME
-                val bucket = SupabaseConfig.supabase.storage.from(bucketName)
 
-                bucket.upload(fileName, bytes)
+                // 2. Request signed upload URL from backend
+                val uploadUrlResponse = apiService.getUploadUrl(mapOf(
+                    "fileName" to fileName,
+                    "contentType" to "image/jpeg"
+                ))
 
-                val encodedBucketName = bucketName.replace(" ", "%20")
-                val publicUrl = "https://${SupabaseConfig.PROJECT_ID}.supabase.co/storage/v1/object/public/$encodedBucketName/$fileName"
+                if (!uploadUrlResponse.isSuccessful) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Failed to get upload URL", Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
 
-                val response = apiService.addPhotoToGallery(userId, mapOf("photoUrl" to publicUrl))
+                val urls = uploadUrlResponse.body()
+                if (urls == null) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Invalid upload URL response", Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+
+                val signedUrl = urls["uploadUrl"]
+                val viewUrl = urls["viewUrl"]
+
+                if (signedUrl == null || viewUrl == null) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Missing upload URLs", Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+
+                // 3. Upload directly to signed URL
+                val uploadRequest = okhttp3.Request.Builder()
+                    .url(signedUrl)
+                    .put(bytes.toRequestBody("image/jpeg".toMediaType()))
+                    .build()
+
+                val client = okhttp3.OkHttpClient()
+                val uploadResponse = client.newCall(uploadRequest).execute()
+
+                if (!uploadResponse.isSuccessful) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Upload failed: ${uploadResponse.code}", Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+
+                // 4. Save the view URL to database
+                val response = apiService.addPhotoToGallery(userId, mapOf("photoUrl" to viewUrl))
 
                 val userResponse = apiService.getUserById(userId)
                 if (userResponse.isSuccessful) {
@@ -798,17 +898,29 @@ class LoginViewModel : ViewModel() {
                     return@launch
                 }
 
-                // Delete photos from Supabase
+                // Delete photos from Cloudflare R2
                 try {
                     // Delete profile photo
-                    user.photoUrl?.let { SupabaseConfig.deleteFile(it) }
+                    user.photoUrl?.let { url ->
+                        val fileName = extractFileNameFromUrl(url)
+                        if (fileName != null) {
+                            apiService.deleteFile(mapOf("fileName" to fileName))
+                        }
+                    }
 
                     // Delete gallery photos
                     user.photos.forEach { photo ->
-                        SupabaseConfig.deleteFile(photo.url)
+                        val fileName = extractFileNameFromUrl(photo.url)
+                        if (fileName != null) {
+                            try {
+                                apiService.deleteFile(mapOf("fileName" to fileName))
+                            } catch (e: Exception) {
+                                Log.w("DeleteProfile", "Failed to delete gallery photo: ${photo.url}")
+                            }
+                        }
                     }
                 } catch (e: Exception) {
-                    Log.w("DeleteProfile", "Failed to delete some photos from Supabase: ${e.message}")
+                    Log.w("DeleteProfile", "Failed to delete some photos from Cloudflare: ${e.message}")
                     // Continue with account deletion even if photo deletion fails
                 }
 
@@ -824,6 +936,19 @@ class LoginViewModel : ViewModel() {
             } catch (e: Exception) {
                 onError("Error: ${e.message}")
             }
+        }
+    }
+
+    private fun extractFileNameFromUrl(url: String): String? {
+        // Cloudflare R2 URL format: https://account.r2.cloudflarestorage.com/bucket/filename
+        // We need to extract "bucket/filename"
+        return try {
+            val uri = java.net.URI(url)
+            val path = uri.path
+            if (path.startsWith("/")) path.substring(1) else path
+        } catch (e: Exception) {
+            Log.e("extractFileNameFromUrl", "Failed to parse URL: $url", e)
+            null
         }
     }
 }

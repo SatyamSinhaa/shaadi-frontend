@@ -59,10 +59,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.okhttp)
     
-    // Supabase
-    implementation("io.github.jan-tennert.supabase:storage-kt:3.0.1")
-    implementation("io.ktor:ktor-client-okhttp:3.0.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    // Cloudflare R2 - using signed URLs, no client library needed
 
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
