@@ -35,6 +35,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -54,8 +57,82 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import java.time.format.DateTimeFormatter
 
+// Helper functions for height formatting and parsing
+fun formatHeightForDisplay(height: Int?): String {
+    if (height == null || height <= 0) return ""
+    val feet = height / 100
+    val inches = height % 100
+    return "$feet'$inches\""
+}
+
+fun parseHeightFromFeetInches(feet: Int, inches: Int): Int {
+    return feet * 100 + inches
+}
+
+fun parseFeetFromHeight(height: Int?): Int? {
+    return height?.div(100)
+}
+
+fun parseInchesFromHeight(height: Int?): Int? {
+    return height?.rem(100)
+}
+
+// Legacy helper function for backward compatibility
+fun formatHeight(raw: String): String {
+    if (raw.isEmpty()) return ""
+    val digits = raw.filter { it.isDigit() }
+    return when (digits.length) {
+        0 -> ""
+        1 -> "${digits}\""
+        2 -> "${digits[0]}'${digits[1]}\""
+        else -> {
+            val feet = digits.dropLast(2)
+            val inches = digits.takeLast(2)
+            "$feet'$inches\""
+        }
+    }
+}
+
+fun formatIncomeForDisplay(income: Long?): String {
+    if (income == null || income <= 0) return ""
+    val incomeStr = income.toString()
+    val digits = incomeStr.reversed()
+
+    // Indian numbering system: first group of 3 digits from right, then groups of 2
+    val groups = mutableListOf<String>()
+    var remainingDigits = digits
+
+    // First group: 3 digits from right
+    if (remainingDigits.length >= 3) {
+        groups.add(remainingDigits.take(3).reversed())
+        remainingDigits = remainingDigits.drop(3)
+    } else {
+        groups.add(remainingDigits.reversed())
+        remainingDigits = ""
+    }
+
+    // Remaining groups: 2 digits each
+    while (remainingDigits.isNotEmpty()) {
+        val groupSize = minOf(2, remainingDigits.length)
+        groups.add(remainingDigits.take(groupSize).reversed())
+        remainingDigits = remainingDigits.drop(groupSize)
+    }
+
+    return groups.reversed().joinToString(",")
+}
+
+fun parseHeightToCm(formatted: String): Int? {
+    // Extract feet and inches from formatted string like "5'10\""
+    val match = Regex("(\\d+)'(\\d+)\"").find(formatted)
+    return match?.let {
+        val feet = it.groupValues[1].toInt()
+        val inches = it.groupValues[2].toInt()
+        (feet * 30.48 + inches * 2.54).toInt() // Convert to cm
+    }
+}
+
 enum class EditSection {
-    NONE, BASIC_INFO, PERSONAL_DETAILS, LOCATION, ABOUT_ME, HEADER
+    NONE, BASIC_INFO, PERSONAL_DETAILS, LOCATION, ABOUT_ME, HEADER, FAMILY_DETAILS, LIFESTYLE
 }
 
 @Composable
@@ -98,6 +175,7 @@ fun ProfileScreen(
                     user = user,
                     subscription = subscription,
                     onEditSection = { section -> currentEditSection = section },
+                    onLogout = { viewModel.logout(context) },
                     onPhotoClick = { if (user.photoUrl != null) showEnlargedPhoto = true },
                     onAddGalleryPhoto = { uri, context -> viewModel.uploadGalleryPhoto(context, uri, user.id) }
                 )
@@ -157,6 +235,7 @@ fun ProfileView(
     user: User,
     subscription: com.example.myapplication.data.model.Subscription? = null,
     onEditSection: (EditSection) -> Unit,
+    onLogout: () -> Unit,
     onPhotoClick: () -> Unit = {},
     onAddGalleryPhoto: (Uri, Context) -> Unit
 ) {
@@ -303,31 +382,40 @@ fun ProfileView(
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     // Basic Info Section
-                    val isBasicInfoMissing = user.age == null || user.gender.isNullOrBlank()
+                    val isBasicInfoMissing = user.age == null
                     ProfileSection(
                         title = "Basic Information",
                         onEdit = { onEditSection(EditSection.BASIC_INFO) },
                         hasWarning = isBasicInfoMissing
                     ) {
                         ProfileField(label = "Age", value = user.age?.toString())
-                        ProfileField(label = "Gender", value = user.gender)
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     // Personal Details Section
-                    val isPersonalDetailsMissing = user.gotr.isNullOrBlank() || user.caste.isNullOrBlank() || user.category.isNullOrBlank() || user.religion.isNullOrBlank()
+                    val isPersonalDetailsMissing = user.profession.isNullOrBlank() || user.education.isNullOrBlank() || user.gotr.isNullOrBlank() || user.caste.isNullOrBlank() || user.category.isNullOrBlank() || user.religion.isNullOrBlank()
                     ProfileSection(
                         title = "Personal Details",
                         onEdit = { onEditSection(EditSection.PERSONAL_DETAILS) },
                         hasWarning = isPersonalDetailsMissing
                     ) {
+                        ProfileField(label = "Marital Status", value = user.maritalStatus)
+                        ProfileField(label = "Manglik", value = if (user.manglik == true) "Yes" else if (user.manglik == false) "No" else null)
+                        ProfileField(label = "Date of Birth", value = user.dateOfBirth)
+                        ProfileField(label = "Height", value = formatHeightForDisplay(user.height))
+                        ProfileField(label = "Weight (kg)", value = user.weightKg?.toString())
+                        ProfileField(label = "Rashi", value = user.rashi)
+                        ProfileField(label = "Profession", value = user.profession)
+                        ProfileField(label = "Education", value = user.education)
+                        ProfileField(label = "Annual Income", value = formatIncomeForDisplay(user.annualIncome))
+                        ProfileField(label = "Mother Tongue", value = user.motherTongue)
                         ProfileField(label = "Gotr", value = user.gotr)
                         ProfileField(label = "Caste", value = user.caste)
                         ProfileField(label = "Category", value = user.category)
                         ProfileField(label = "Religion", value = user.religion)
                     }
                     Spacer(modifier = Modifier.height(16.dp))
-                    
+
                     // Location Section
                     val isLocationMissing = user.cityTown.isNullOrBlank() || user.district.isNullOrBlank() || user.state.isNullOrBlank()
                     ProfileSection(
@@ -338,9 +426,57 @@ fun ProfileView(
                         ProfileField(label = "City/Town", value = user.cityTown)
                         ProfileField(label = "District", value = user.district)
                         ProfileField(label = "State", value = user.state)
+                        ProfileField(label = "Address", value = user.address)
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Family Details Section
+                    val isFamilyDetailsMissing = user.fatherName.isNullOrBlank() || user.motherName.isNullOrBlank()
+                    ProfileSection(
+                        title = "Family Details",
+                        onEdit = { onEditSection(EditSection.FAMILY_DETAILS) },
+                        hasWarning = isFamilyDetailsMissing
+                    ) {
+                        ProfileField(label = "Father Name", value = user.fatherName)
+                        ProfileField(label = "Father Occupation", value = user.fatherOccupation)
+                        ProfileField(label = "Mother Name", value = user.motherName)
+                        ProfileField(label = "Mother Occupation", value = user.motherOccupation)
+                        ProfileField(label = "Number of Brothers", value = user.numberOfBrothers?.toString())
+                        ProfileField(label = "Number of Sisters", value = user.numberOfSisters?.toString())
+                        ProfileField(label = "Family Type", value = user.familyType)
+                        ProfileField(label = "Family Locations", value = user.familyLocations)
+                        ProfileField(label = "Property", value = user.property)
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Lifestyle Section
+                    val isLifestyleMissing = user.diet.isNullOrBlank()
+                    ProfileSection(
+                        title = "Lifestyle",
+                        onEdit = { onEditSection(EditSection.LIFESTYLE) },
+                        hasWarning = isLifestyleMissing
+                    ) {
+                        ProfileField(label = "Diet", value = user.diet)
+                        ProfileField(label = "Smoking", value = if (user.smoking == true) "Yes" else if (user.smoking == false) "No" else null)
+                        ProfileField(label = "Drinking", value = if (user.drinking == true) "Yes" else if (user.drinking == false) "No" else null)
                     }
                     
+                    Spacer(modifier = Modifier.height(24.dp))
 
+                    // Action Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onLogout,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Filled.ExitToApp, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Logout")
+                        }
+                    }
                 }
                 1 -> {
                     // Photos Tab
@@ -552,7 +688,6 @@ fun SectionEditForm(
 
     // Local state for all fields, we'll only show relevant ones based on section
     var name by remember { mutableStateOf(user.name) }
-    var photoUrl by remember { mutableStateOf(user.photoUrl ?: "") }
 
     var age by remember { mutableStateOf(user.age?.toString() ?: "") }
     var gender by remember { mutableStateOf(user.gender ?: "") }
@@ -567,6 +702,31 @@ fun SectionEditForm(
     var state by remember { mutableStateOf(user.state ?: "") }
     
     var bio by remember { mutableStateOf(user.bio ?: "") }
+
+    var maritalStatus by remember { mutableStateOf(user.maritalStatus ?: "") }
+    var manglik by remember { mutableStateOf(if (user.manglik == true) "Yes" else "No") }
+    var dateOfBirth by remember { mutableStateOf(user.dateOfBirth ?: "") }
+    var heightFeet by remember { mutableStateOf(parseFeetFromHeight(user.height)?.toString() ?: "") }
+    var heightInches by remember { mutableStateOf(parseInchesFromHeight(user.height)?.toString() ?: "") }
+    var weightKg by remember { mutableStateOf(user.weightKg?.toString() ?: "") }
+    var rawIncome by remember { mutableStateOf(user.annualIncome?.toString() ?: "") }
+    var rashi by remember { mutableStateOf(user.rashi ?: "") }
+    var profession by remember { mutableStateOf(user.profession ?: "") }
+    var education by remember { mutableStateOf(user.education ?: "") }
+    var motherTongue by remember { mutableStateOf(user.motherTongue ?: "") }
+    var address by remember { mutableStateOf(user.address ?: "") }
+    var fatherName by remember { mutableStateOf(user.fatherName ?: "") }
+    var fatherOccupation by remember { mutableStateOf(user.fatherOccupation ?: "") }
+    var motherName by remember { mutableStateOf(user.motherName ?: "") }
+    var motherOccupation by remember { mutableStateOf(user.motherOccupation ?: "") }
+    var numberOfBrothers by remember { mutableStateOf(user.numberOfBrothers?.toString() ?: "") }
+    var numberOfSisters by remember { mutableStateOf(user.numberOfSisters?.toString() ?: "") }
+    var familyType by remember { mutableStateOf(user.familyType ?: "") }
+    var familyLocations by remember { mutableStateOf(user.familyLocations ?: "") }
+    var property by remember { mutableStateOf(user.property ?: "") }
+    var diet by remember { mutableStateOf(user.diet ?: "") }
+    var smoking by remember { mutableStateOf(if (user.smoking == true) "Yes" else "No") }
+    var drinking by remember { mutableStateOf(if (user.drinking == true) "Yes" else "No") }
 
     Column(
         modifier = modifier
@@ -644,14 +804,101 @@ fun SectionEditForm(
                     label = { Text("Age") },
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = gender,
-                    onValueChange = { gender = it },
-                    label = { Text("Gender") },
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
             EditSection.PERSONAL_DETAILS -> {
+                OutlinedTextField(
+                    value = maritalStatus,
+                    onValueChange = { maritalStatus = it },
+                    label = { Text("Marital Status") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                // Manglik Radio Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Manglik", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.width(80.dp))
+                    RadioButton(
+                        selected = manglik == "Yes",
+                        onClick = { manglik = "Yes" }
+                    )
+                    Text("Yes", modifier = Modifier.padding(start = 8.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    RadioButton(
+                        selected = manglik == "No",
+                        onClick = { manglik = "No" }
+                    )
+                    Text("No", modifier = Modifier.padding(start = 8.dp))
+                }
+                OutlinedTextField(
+                    value = dateOfBirth,
+                    onValueChange = { dateOfBirth = it },
+                    label = { Text("Date of Birth") },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("yyyy-mm-dd") }
+                )
+                // Height fields: feet and inches
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = heightFeet,
+                        onValueChange = { heightFeet = it.filter { char -> char.isDigit() } },
+                        label = { Text("Feet") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        placeholder = { Text("5") }
+                    )
+                    OutlinedTextField(
+                        value = heightInches,
+                        onValueChange = { heightInches = it.filter { char -> char.isDigit() } },
+                        label = { Text("Inches") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        placeholder = { Text("10") }
+                    )
+                }
+                OutlinedTextField(
+                    value = weightKg,
+                    onValueChange = { weightKg = it.filter { it.isDigit() } },
+                    label = { Text("Weight (kg)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                OutlinedTextField(
+                    value = rashi,
+                    onValueChange = { rashi = it },
+                    label = { Text("Rashi") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = profession,
+                    onValueChange = { profession = it },
+                    label = { Text("Profession") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = education,
+                    onValueChange = { education = it },
+                    label = { Text("Education") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = rawIncome,
+                    onValueChange = { rawIncome = it.filter { char -> char.isDigit() } },
+                    label = { Text("Annual Income") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    placeholder = { Text("e.g. 500000") }
+                )
+                OutlinedTextField(
+                    value = motherTongue,
+                    onValueChange = { motherTongue = it },
+                    label = { Text("Mother Tongue") },
+                    modifier = Modifier.fillMaxWidth()
+                )
                 OutlinedTextField(
                     value = gotr,
                     onValueChange = { gotr = it },
@@ -706,6 +953,110 @@ fun SectionEditForm(
                     maxLines = 5
                 )
             }
+            EditSection.FAMILY_DETAILS -> {
+                OutlinedTextField(
+                    value = fatherName,
+                    onValueChange = { fatherName = it },
+                    label = { Text("Father Name") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = fatherOccupation,
+                    onValueChange = { fatherOccupation = it },
+                    label = { Text("Father Occupation") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = motherName,
+                    onValueChange = { motherName = it },
+                    label = { Text("Mother Name") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = motherOccupation,
+                    onValueChange = { motherOccupation = it },
+                    label = { Text("Mother Occupation") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = numberOfBrothers,
+                    onValueChange = { numberOfBrothers = it.filter { char -> char.isDigit() } },
+                    label = { Text("Number of Brothers") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                OutlinedTextField(
+                    value = numberOfSisters,
+                    onValueChange = { numberOfSisters = it.filter { char -> char.isDigit() } },
+                    label = { Text("Number of Sisters") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                OutlinedTextField(
+                    value = familyType,
+                    onValueChange = { familyType = it },
+                    label = { Text("Family Type") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = familyLocations,
+                    onValueChange = { familyLocations = it },
+                    label = { Text("Family Locations") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = property,
+                    onValueChange = { property = it },
+                    label = { Text("Property") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            EditSection.LIFESTYLE -> {
+                OutlinedTextField(
+                    value = diet,
+                    onValueChange = { diet = it },
+                    label = { Text("Diet") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                // Smoking Radio Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Smoking", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.width(80.dp))
+                    RadioButton(
+                        selected = smoking == "Yes",
+                        onClick = { smoking = "Yes" }
+                    )
+                    Text("Yes", modifier = Modifier.padding(start = 8.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    RadioButton(
+                        selected = smoking == "No",
+                        onClick = { smoking = "No" }
+                    )
+                    Text("No", modifier = Modifier.padding(start = 8.dp))
+                }
+                // Drinking Radio Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Drinking", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.width(80.dp))
+                    RadioButton(
+                        selected = drinking == "Yes",
+                        onClick = { drinking = "Yes" }
+                    )
+                    Text("Yes", modifier = Modifier.padding(start = 8.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    RadioButton(
+                        selected = drinking == "No",
+                        onClick = { drinking = "No" }
+                    )
+                    Text("No", modifier = Modifier.padding(start = 8.dp))
+                }
+            }
             else -> {}
         }
 
@@ -720,23 +1071,53 @@ fun SectionEditForm(
                     // Create updated user based on the section being edited
                     val updatedUser = when (section) {
                         EditSection.HEADER -> user.copy(
-                            name = name.takeIf { it.isNotBlank() } ?: user.name,
-                            photoUrl = photoUrl.takeIf { it.isNotBlank() }
+                            name = name.takeIf { it.isNotBlank() } ?: user.name
                         )
                         EditSection.BASIC_INFO -> user.copy(
                             age = age.toIntOrNull(),
                             gender = gender.takeIf { it.isNotBlank() }
                         )
-                        EditSection.PERSONAL_DETAILS -> user.copy(
-                            gotr = gotr.takeIf { it.isNotBlank() },
-                            caste = caste.takeIf { it.isNotBlank() },
-                            category = category.takeIf { it.isNotBlank() },
-                            religion = religion.takeIf { it.isNotBlank() }
-                        )
+                        EditSection.PERSONAL_DETAILS -> {
+                            val feet = heightFeet.toIntOrNull() ?: 0
+                            val inches = heightInches.toIntOrNull() ?: 0
+                            val height = if (feet > 0 || inches > 0) parseHeightFromFeetInches(feet, inches) else user.height
+                            user.copy(
+                                maritalStatus = maritalStatus.takeIf { it.isNotBlank() },
+                                manglik = if (manglik.equals("Yes", ignoreCase = true)) true else if (manglik.equals("No", ignoreCase = true)) false else null,
+                                dateOfBirth = dateOfBirth.takeIf { it.isNotBlank() },
+                                height = height,
+                                weightKg = weightKg.toIntOrNull(),
+                                rashi = rashi.takeIf { it.isNotBlank() },
+                                profession = profession.takeIf { it.isNotBlank() },
+                                education = education.takeIf { it.isNotBlank() },
+                                annualIncome = rawIncome.toLongOrNull(),
+                                motherTongue = motherTongue.takeIf { it.isNotBlank() },
+                                gotr = gotr.takeIf { it.isNotBlank() },
+                                caste = caste.takeIf { it.isNotBlank() },
+                                category = category.takeIf { it.isNotBlank() },
+                                religion = religion.takeIf { it.isNotBlank() }
+                            )
+                        }
                         EditSection.LOCATION -> user.copy(
                             cityTown = cityTown.takeIf { it.isNotBlank() },
                             district = district.takeIf { it.isNotBlank() },
                             state = state.takeIf { it.isNotBlank() }
+                        )
+                        EditSection.FAMILY_DETAILS -> user.copy(
+                            fatherName = fatherName.takeIf { it.isNotBlank() },
+                            fatherOccupation = fatherOccupation.takeIf { it.isNotBlank() },
+                            motherName = motherName.takeIf { it.isNotBlank() },
+                            motherOccupation = motherOccupation.takeIf { it.isNotBlank() },
+                            numberOfBrothers = numberOfBrothers.toIntOrNull(),
+                            numberOfSisters = numberOfSisters.toIntOrNull(),
+                            familyType = familyType.takeIf { it.isNotBlank() },
+                            familyLocations = familyLocations.takeIf { it.isNotBlank() },
+                            property = property.takeIf { it.isNotBlank() }
+                        )
+                        EditSection.LIFESTYLE -> user.copy(
+                            diet = diet.takeIf { it.isNotBlank() },
+                            smoking = if (smoking.equals("Yes", ignoreCase = true)) true else if (smoking.equals("No", ignoreCase = true)) false else null,
+                            drinking = if (drinking.equals("Yes", ignoreCase = true)) true else if (drinking.equals("No", ignoreCase = true)) false else null
                         )
                         EditSection.ABOUT_ME -> user.copy(
                             bio = bio.takeIf { it.isNotBlank() }

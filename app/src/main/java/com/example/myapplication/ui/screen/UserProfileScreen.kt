@@ -360,6 +360,16 @@ fun UserProfileScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         ProfileSection(title = "Personal Details") {
+                            if (user.maritalStatus != null) ProfileField(label = "Marital Status", value = user.maritalStatus)
+                            if (user.manglik != null) ProfileField(label = "Manglik", value = if (user.manglik == true) "Yes" else "No")
+                            if (user.dateOfBirth != null) ProfileField(label = "Date of Birth", value = user.dateOfBirth)
+                            if (user.height != null) ProfileField(label = "Height", value = formatHeightForDisplay(user.height))
+                            if (user.annualIncome != null) ProfileField(label = "Annual Income", value = formatIncomeForDisplay(user.annualIncome))
+                            if (user.weightKg != null) ProfileField(label = "Weight (kg)", value = user.weightKg.toString())
+                            if (user.rashi != null) ProfileField(label = "Rashi", value = user.rashi)
+                            if (user.profession != null) ProfileField(label = "Profession", value = user.profession)
+                            if (user.education != null) ProfileField(label = "Education", value = user.education)
+                            if (user.motherTongue != null) ProfileField(label = "Mother Tongue", value = user.motherTongue)
                             if (user.gotr != null) ProfileField(label = "Gotr", value = user.gotr)
                             if (user.caste != null) ProfileField(label = "Caste", value = user.caste)
                             if (user.category != null) ProfileField(label = "Category", value = user.category)
@@ -372,6 +382,29 @@ fun UserProfileScreen(
                             if (user.cityTown != null) ProfileField(label = "City/Town", value = user.cityTown)
                             if (user.district != null) ProfileField(label = "District", value = user.district)
                             if (user.state != null) ProfileField(label = "State", value = user.state)
+                            if (user.address != null) ProfileField(label = "Address", value = user.address)
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        ProfileSection(title = "Family Details") {
+                            if (user.fatherName != null) ProfileField(label = "Father Name", value = user.fatherName)
+                            if (user.fatherOccupation != null) ProfileField(label = "Father Occupation", value = user.fatherOccupation)
+                            if (user.motherName != null) ProfileField(label = "Mother Name", value = user.motherName)
+                            if (user.motherOccupation != null) ProfileField(label = "Mother Occupation", value = user.motherOccupation)
+                            if (user.numberOfBrothers != null) ProfileField(label = "Number of Brothers", value = user.numberOfBrothers.toString())
+                            if (user.numberOfSisters != null) ProfileField(label = "Number of Sisters", value = user.numberOfSisters.toString())
+                            if (user.familyType != null) ProfileField(label = "Family Type", value = user.familyType)
+                            if (user.familyLocations != null) ProfileField(label = "Family Locations", value = user.familyLocations)
+                            if (user.property != null) ProfileField(label = "Property", value = user.property)
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        ProfileSection(title = "Lifestyle") {
+                            if (user.diet != null) ProfileField(label = "Diet", value = user.diet)
+                            if (user.smoking != null) ProfileField(label = "Smoking", value = if (user.smoking == true) "Yes" else "No")
+                            if (user.drinking != null) ProfileField(label = "Drinking", value = if (user.drinking == true) "Yes" else "No")
                         }
                     }
                     1 -> {
