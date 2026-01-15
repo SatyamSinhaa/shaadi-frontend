@@ -5,7 +5,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.data.model.User
@@ -30,7 +33,7 @@ fun RegisterScreen(modifier: Modifier = Modifier, onBackToLogin: (String) -> Uni
     // Step 1: Account
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    var mobileNumber by remember { mutableStateOf("") }
     var gender by remember { mutableStateOf("") }
 
     // Step 2: Personal Details
@@ -75,7 +78,7 @@ fun RegisterScreen(modifier: Modifier = Modifier, onBackToLogin: (String) -> Uni
             // New Google user
             name = googleUserInfo.name
             email = googleUserInfo.email
-            password = "google_auth_placeholder" // Placeholder, won't be used
+            mobileNumber = "" // Will be entered by user
         }
     }
 
@@ -134,19 +137,31 @@ fun RegisterScreen(modifier: Modifier = Modifier, onBackToLogin: (String) -> Uni
 
                     OutlinedTextField(
                         value = email,
-                        onValueChange = { email = it },
+                        onValueChange = { if (googleUserInfo == null) email = it },
                         label = { Text("Email") },
+                        readOnly = googleUserInfo != null,
+                        enabled = googleUserInfo == null,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text("Password") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "+91",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                        OutlinedTextField(
+                            value = mobileNumber,
+                            onValueChange = { mobileNumber = it },
+                            label = { Text("Mobile Number") },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                        )
+                    }
                     Spacer(modifier = Modifier.height(16.dp))
 
                     var expanded by remember { mutableStateOf(false) }
@@ -180,23 +195,33 @@ fun RegisterScreen(modifier: Modifier = Modifier, onBackToLogin: (String) -> Uni
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Text(
+                        text = "Note: Mobile number and email will not be visible to others",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Red,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
 
                     Button(
                         onClick = {
                             if (googleUserInfo != null) {
                                 // For Google users, save Firebase UID immediately after Step 1
-                                viewModel.registerWithGoogleAndSaveUID(googleUserInfo, name, email, gender) { user ->
+                                viewModel.registerWithGoogleAndSaveUID(googleUserInfo, name, email, mobileNumber, gender) { user ->
                                     // User is now registered with Firebase UID saved
                                     registeredUser = user
                                     currentStep = 1
                                 }
                             } else {
-                                viewModel.register(name, email, password, gender)
+                                viewModel.register(name, email, mobileNumber, gender)
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = name.isNotBlank() && email.isNotBlank() && gender.isNotBlank() && registerState !is LoginState.Loading
+                        enabled = name.isNotBlank() && email.isNotBlank() && mobileNumber.isNotBlank() && gender.isNotBlank() && registerState !is LoginState.Loading
                     ) {
                         if (registerState is LoginState.Loading) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)

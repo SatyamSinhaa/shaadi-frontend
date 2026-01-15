@@ -11,7 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.ui.viewmodel.LoginState
@@ -28,7 +28,7 @@ fun DeleteProfileScreen(
 ) {
     val context = LocalContext.current
     val loginState by viewModel.loginState.collectAsState()
-    var password by remember { mutableStateOf("") }
+    var confirmationText by remember { mutableStateOf("") }
     var showConfirmationDialog by remember { mutableStateOf(false) }
     var isDeleting by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -41,7 +41,7 @@ fun DeleteProfileScreen(
         AlertDialog(
             onDismissRequest = { showConfirmationDialog = false },
             title = { Text("Delete Profile") },
-            text = { Text("Are you sure you want to delete your profile? This action cannot be undone. All your photos will be deleted and you will be logged out.") },
+            text = { Text("Are you sure you want to delete your profile? By typing 'delete' in the confirmation field, you acknowledge that this action cannot be undone. All your photos will be deleted and you will be logged out.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -53,7 +53,7 @@ fun DeleteProfileScreen(
                             viewModel.deleteProfile(
                                 context = context,
                                 userId = it.id,
-                                password = password,
+                                confirmationText = confirmationText,
                                 onSuccess = {
                                     // Profile deleted successfully, will be logged out automatically
                                 },
@@ -130,10 +130,9 @@ fun DeleteProfileScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Enter your password to confirm") },
-                visualTransformation = PasswordVisualTransformation(),
+                value = confirmationText,
+                onValueChange = { confirmationText = it },
+                label = { Text("Type 'delete' to confirm profile deletion") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 enabled = !isDeleting
@@ -157,8 +156,8 @@ fun DeleteProfileScreen(
             } else {
                 Button(
                     onClick = {
-                        if (password.isBlank()) {
-                            errorMessage = "Please enter your password"
+                        if (confirmationText.lowercase() != "delete") {
+                            errorMessage = "Please type 'delete' to confirm"
                         } else {
                             showConfirmationDialog = true
                         }
@@ -173,7 +172,7 @@ fun DeleteProfileScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "This action cannot be reversed. Please make sure you want to permanently delete your account.",
+                text = "To proceed with deletion, please type 'delete' in the field above. This confirms your understanding that this action is permanent and irreversible.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp)

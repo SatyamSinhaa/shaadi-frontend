@@ -131,8 +131,27 @@ fun AppNavigation(
             showPlans = false
             showSearch = false
             showNotifications = false
+            showBlockedProfiles = false
+            showSubscriptionDetails = false
+            showDeleteProfile = false
+            showHistory = false
+            showChatDetail = null
             loginViewModel.selectUser(null)
             hasLandedAfterLogin = true
+        } else if (loginState is LoginState.Idle) {
+            // Reset navigation state when logged out
+            hasLandedAfterLogin = false
+            selectedTab = 0
+            showFavourites = false
+            showPlans = false
+            showSearch = false
+            showNotifications = false
+            showBlockedProfiles = false
+            showSubscriptionDetails = false
+            showDeleteProfile = false
+            showHistory = false
+            showChatDetail = null
+            loginViewModel.selectUser(null)
         }
     }
 

@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.R
 import com.example.myapplication.ui.viewmodel.LoginState
@@ -66,6 +67,8 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
+            // Manual login fields - commented out for now
+            /*
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
@@ -101,14 +104,15 @@ fun LoginScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+            */
 
-            // Google Sign-In Button
+            // Google Sign-In Button - Blue background with white text
             Button(
                 onClick = onGoogleSignInClick,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = Color(0xFF4285F4), // Google Blue
+                    contentColor = Color.White  // White text
                 )
             ) {
                 Text("Sign in with Google")
@@ -116,9 +120,12 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Create account button - commented out for now
+            /*
             TextButton(onClick = onRegisterClick) {
                 Text("Create a new account")
             }
+            */
 
             Spacer(modifier = Modifier.height(16.dp))
 

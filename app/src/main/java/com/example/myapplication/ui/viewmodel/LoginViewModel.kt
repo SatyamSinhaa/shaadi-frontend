@@ -11,6 +11,8 @@ import com.example.myapplication.data.api.RetrofitClient
 import com.example.myapplication.data.api.GoogleSignInHelper
 import com.example.myapplication.data.api.WebSocketMessage
 import com.example.myapplication.data.api.PhotoUpdateRequest
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
 import com.example.myapplication.data.model.ChatRequest
 import com.example.myapplication.data.model.ErrorResponse
 import com.example.myapplication.data.model.Favourite
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -658,11 +661,11 @@ class LoginViewModel : ViewModel() {
         fetchMessages(userId)
     }
 
-    fun register(name: String, email: String, password: String, gender: String) {
+    fun register(name: String, email: String, mobileNumber: String, gender: String) {
         _registerState.value = LoginState.Loading
         viewModelScope.launch {
             try {
-                val response: Response<User> = apiService.register(RegisterDto(email, password, name, gender))
+                val response: Response<User> = apiService.register(RegisterDto(email, mobileNumber, name, gender))
                 if (response.isSuccessful) {
                     response.body()?.let { _registerState.value = LoginState.Success(it) }
                 } else {
@@ -674,13 +677,13 @@ class LoginViewModel : ViewModel() {
         }
     }
 
-    fun registerWithGoogleAndSaveUID(googleUserInfo: GoogleUserInfo, name: String, email: String, gender: String, onSuccess: (User) -> Unit) {
+    fun registerWithGoogleAndSaveUID(googleUserInfo: GoogleUserInfo, name: String, email: String, mobileNumber: String, gender: String, onSuccess: (User) -> Unit) {
         _registerState.value = LoginState.Loading
         viewModelScope.launch {
             try {
                 // For Google users, we need to register and then link the Firebase UID
                 // First register normally
-                val response: Response<User> = apiService.register(RegisterDto(email, "google_auth_placeholder", name, gender))
+                val response: Response<User> = apiService.register(RegisterDto(email, mobileNumber, name, gender))
                 if (response.isSuccessful) {
                 response.body()?.let { user ->
                     Log.d("LoginViewModel", "User registered successfully, now linking Firebase UID: ${googleUserInfo.firebaseUid}")
@@ -922,47 +925,86 @@ class LoginViewModel : ViewModel() {
         }
     }
 
-    fun deleteProfile(context: Context, userId: Int, password: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+    fun deleteProfile(context: Context, userId: Int, confirmationText: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
         viewModelScope.launch {
             try {
                 val user = (loginState.value as? LoginState.Success)?.user ?: return@launch
 
-                // First verify password by attempting login with user's email
-                val loginResponse = apiService.login(LoginDto(user.email, password))
-                if (!loginResponse.isSuccessful) {
-                    onError("Incorrect password")
+                // Verify that user typed "delete"
+                if (confirmationText.lowercase() != "delete") {
+                    onError("Please type 'delete' to confirm")
                     return@launch
+                }
+
+                // Delete user from Firebase if they have a Firebase UID (Google users)
+                try {
+                    if (user.firebaseUid != null) {
+                        val currentUser = FirebaseAuth.getInstance().currentUser
+                        if (currentUser != null) {
+                            Log.d("DeleteProfile", "Attempting to delete Firebase user: ${user.firebaseUid}")
+                            currentUser.delete().await()
+                            Log.d("DeleteProfile", "Successfully deleted Firebase user: ${user.firebaseUid}")
+                        } else {
+                            Log.w("DeleteProfile", "Firebase currentUser is null, cannot delete Firebase account")
+                        }
+                    } else {
+                        Log.d("DeleteProfile", "User does not have Firebase UID, skipping Firebase deletion")
+                    }
+                } catch (e: Exception) {
+                    Log.e("DeleteProfile", "Failed to delete Firebase user: ${e.message}", e)
+                    // Continue with account deletion even if Firebase deletion fails
                 }
 
                 // Delete photos from Cloudflare R2
                 try {
+                    Log.d("DeleteProfile", "Starting photo deletion process")
+
                     // Delete profile photo
                     user.photoUrl?.let { url ->
+                        Log.d("DeleteProfile", "Deleting profile photo: $url")
                         val fileName = extractFileNameFromUrl(url)
+                        Log.d("DeleteProfile", "Extracted filename: $fileName")
                         if (fileName != null) {
-                            apiService.deleteFile(mapOf("fileName" to fileName))
+                            val response = apiService.deleteFile(mapOf("fileName" to fileName))
+                            if (response.isSuccessful) {
+                                Log.d("DeleteProfile", "Successfully deleted profile photo: $fileName")
+                            } else {
+                                Log.e("DeleteProfile", "Failed to delete profile photo: ${response.code()} - ${response.errorBody()?.string()}")
+                            }
                         }
                     }
 
                     // Delete gallery photos
                     user.photos.forEach { photo ->
+                        Log.d("DeleteProfile", "Deleting gallery photo: ${photo.url}")
                         val fileName = extractFileNameFromUrl(photo.url)
+                        Log.d("DeleteProfile", "Extracted filename: $fileName")
                         if (fileName != null) {
                             try {
-                                apiService.deleteFile(mapOf("fileName" to fileName))
+                                val response = apiService.deleteFile(mapOf("fileName" to fileName))
+                                if (response.isSuccessful) {
+                                    Log.d("DeleteProfile", "Successfully deleted gallery photo: $fileName")
+                                } else {
+                                    Log.e("DeleteProfile", "Failed to delete gallery photo: ${response.code()} - ${response.errorBody()?.string()}")
+                                }
                             } catch (e: Exception) {
-                                Log.w("DeleteProfile", "Failed to delete gallery photo: ${photo.url}")
+                                Log.e("DeleteProfile", "Exception deleting gallery photo: ${photo.url}", e)
                             }
                         }
                     }
+                    Log.d("DeleteProfile", "Photo deletion process completed")
                 } catch (e: Exception) {
-                    Log.w("DeleteProfile", "Failed to delete some photos from Cloudflare: ${e.message}")
+                    Log.e("DeleteProfile", "Failed to delete photos from Cloudflare: ${e.message}", e)
                     // Continue with account deletion even if photo deletion fails
                 }
 
                 // Delete user from backend
                 val deleteResponse = apiService.deleteUser(userId)
                 if (deleteResponse.isSuccessful) {
+                    // Clear any cached navigation state before logout
+                    val prefs = context.getSharedPreferences("shaadi_prefs", android.content.Context.MODE_PRIVATE)
+                    prefs.edit().putBoolean("has_landed_after_login", false).apply()
+
                     // Logout after successful deletion
                     logout(context)
                     onSuccess()
