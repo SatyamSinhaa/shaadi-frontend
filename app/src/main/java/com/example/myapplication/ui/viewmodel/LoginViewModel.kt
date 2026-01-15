@@ -128,6 +128,11 @@ class LoginViewModel : ViewModel() {
     private val _users = MutableStateFlow<List<User>>(emptyList())
     val users: StateFlow<List<User>> = _users.asStateFlow()
 
+    private val _currentPage = MutableStateFlow(0)
+    private val _isLoadingMore = MutableStateFlow(false)
+    val isLoadingMore: StateFlow<Boolean> = _isLoadingMore.asStateFlow()
+    private val _hasMorePages = MutableStateFlow(true)
+
     private val _favourites = MutableStateFlow<List<Favourite>>(emptyList())
     val favourites: StateFlow<List<Favourite>> = _favourites.asStateFlow()
 
@@ -449,6 +454,10 @@ class LoginViewModel : ViewModel() {
         _users.value = emptyList()
         _messages.value = emptyList()
         _subscription.value = null
+        // Reset pagination state
+        _currentPage.value = 0
+        _hasMorePages.value = true
+        _isLoadingMore.value = false
     }
 
     fun resetLoginState() {
@@ -505,6 +514,11 @@ class LoginViewModel : ViewModel() {
     }
 
     fun fetchAllUsers() {
+        // Reset pagination state
+        _currentPage.value = 0
+        _hasMorePages.value = true
+        _isLoadingMore.value = false
+
         val currentUser = (loginState.value as? LoginState.Success)?.user
         val oppositeGender = when (currentUser?.gender?.lowercase()) {
             "male" -> "Female"
@@ -513,11 +527,57 @@ class LoginViewModel : ViewModel() {
         }
         viewModelScope.launch {
             try {
-                val response: Response<List<User>> = apiService.getAllUsers(oppositeGender, currentUser?.id)
+                val response: Response<List<User>> = apiService.getAllUsers(oppositeGender, currentUser?.id, 0, 10)
                 if (response.isSuccessful) {
-                    response.body()?.let { _users.value = it }
+                    response.body()?.let { users ->
+                        // Shuffle the first batch
+                        _users.value = users.shuffled()
+                        _currentPage.value = 1
+                        // Check if there are more pages based on response size
+                        _hasMorePages.value = users.size >= 10
+                    }
                 }
             } catch (e: Exception) {}
+        }
+    }
+
+    fun loadNextBatch() {
+        if (_isLoadingMore.value || !_hasMorePages.value) return
+
+        _isLoadingMore.value = true
+        val currentUser = (loginState.value as? LoginState.Success)?.user
+        val oppositeGender = when (currentUser?.gender?.lowercase()) {
+            "male" -> "Female"
+            "female" -> "Male"
+            else -> null
+        }
+        viewModelScope.launch {
+            try {
+                val response: Response<List<User>> = apiService.getAllUsers(
+                    oppositeGender,
+                    currentUser?.id,
+                    _currentPage.value,
+                    10
+                )
+                if (response.isSuccessful) {
+                    response.body()?.let { newUsers ->
+                        if (newUsers.isNotEmpty()) {
+                            // Shuffle the new batch and append to existing users
+                            val shuffledNewUsers = newUsers.shuffled()
+                            _users.value = _users.value + shuffledNewUsers
+                            _currentPage.value = _currentPage.value + 1
+                            // Check if there are more pages
+                            _hasMorePages.value = newUsers.size >= 10
+                        } else {
+                            _hasMorePages.value = false
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Handle error if needed
+            } finally {
+                _isLoadingMore.value = false
+            }
         }
     }
 

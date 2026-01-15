@@ -47,18 +47,19 @@ fun UserListScreen(
     val userProfileLoading by viewModel.userProfileLoading.collectAsState(initial = false)
     val favourites by viewModel.favourites.collectAsState()
     val chatRequests by viewModel.chatRequests.collectAsState()
+    val isLoadingMore by viewModel.isLoadingMore.collectAsState()
 
     val currentUserId = (loginState as? LoginState.Success)?.user?.id
     val filteredUsers = users.filter { it.id != currentUserId }
 
-    val shuffledUsers = remember { mutableStateOf<List<User>>(emptyList()) }
+    val pagerState = rememberPagerState(pageCount = { filteredUsers.size })
 
-    // Shuffle users when filteredUsers changes
-    LaunchedEffect(filteredUsers) {
-        shuffledUsers.value = filteredUsers.shuffled()
+    // Trigger loading next batch when user scrolls to 7th profile (index 6)
+    LaunchedEffect(pagerState.currentPage) {
+        if (pagerState.currentPage >= 6 && filteredUsers.size >= 7) {
+            viewModel.loadNextBatch()
+        }
     }
-
-    val pagerState = rememberPagerState(pageCount = { shuffledUsers.value.size })
 
     // Fetch favourites and chat requests when screen loads or user logs in
     LaunchedEffect(currentUserId) {
@@ -93,18 +94,18 @@ fun UserListScreen(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize()
             ) { page ->
-                val targetUser = shuffledUsers.value[page]
+                val targetUser = filteredUsers[page]
                 val isFavourite = favourites.any { it.favouritedUser.id == targetUser.id }
-                
+
                 // Determine chat status
                 val currentRequest = if (currentUserId != null) {
-                    chatRequests.find { 
+                    chatRequests.find {
                         (it.sender.id == currentUserId && it.receiver.id == targetUser.id) ||
                         (it.sender.id == targetUser.id && it.receiver.id == currentUserId)
                     }
                 } else null
                 val requestStatus = currentRequest?.status
-                
+
                 // Check if we are the sender of a pending request
                 val isPendingSender = currentRequest?.sender?.id == currentUserId && requestStatus == "PENDING"
 
@@ -157,6 +158,22 @@ fun UserListScreen(
                         viewModel.fetchUserById(targetUser.id)
                     }
                 )
+            }
+
+            // Show loading indicator at bottom when loading more users
+            if (isLoadingMore) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
             }
         }
     }

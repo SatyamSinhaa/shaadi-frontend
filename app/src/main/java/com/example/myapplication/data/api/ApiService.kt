@@ -28,7 +28,9 @@ interface ApiService {
     @GET("api/users")
     suspend fun getAllUsers(
         @Query("gender") gender: String? = null,
-        @Query("currentUserId") currentUserId: Int? = null
+        @Query("currentUserId") currentUserId: Int? = null,
+        @Query("page") page: Int = 0,
+        @Query("size") size: Int = 10
     ): Response<List<User>>
 
     @GET("api/users/search")
