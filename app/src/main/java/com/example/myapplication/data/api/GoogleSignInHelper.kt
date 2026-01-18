@@ -43,25 +43,53 @@ class GoogleSignInHelper(private val context: Context) {
     suspend fun handleSignInResult(data: Intent?): Pair<String?, GoogleSignInAccount?> {
         return try {
             Log.d("GoogleSignInHelper", "Processing sign-in result, data: ${data != null}")
+            
+            // Use a safer approach to get the Google account
             val task: Task<GoogleSignInAccount> = GoogleSignIn.getSignedInAccountFromIntent(data)
-            val account = task.getResult(ApiException::class.java)
+            val account = task.await()
+            
+            if (account == null) {
+                Log.e("GoogleSignInHelper", "Failed to get Google account")
+                return Pair(null, null)
+            }
+            
             Log.d("GoogleSignInHelper", "Google account obtained: ${account.email}")
 
-            // Google Sign In was successful, authenticate with Firebase
-            val credential = GoogleAuthProvider.getCredential(account.idToken, null)
-            Log.d("GoogleSignInHelper", "Authenticating with Firebase")
-            val authResult = auth.signInWithCredential(credential).await()
-            Log.d("GoogleSignInHelper", "Firebase auth successful for: ${authResult.user?.email}")
+            // Get the Google ID token to authenticate with Firebase
+            val googleIdToken = account.idToken
+            if (googleIdToken == null) {
+                Log.e("GoogleSignInHelper", "Google ID token is null")
+                return Pair(null, null)
+            }
 
-            // Return the ID token and account info
-            val idToken = authResult.user?.getIdToken(false)?.await()?.token
-            Log.d("GoogleSignInHelper", "ID token obtained: ${idToken != null}")
-            Pair(idToken, account)
+            // Authenticate with Firebase using the Google ID token
+            val credential = GoogleAuthProvider.getCredential(googleIdToken, null)
+            Log.d("GoogleSignInHelper", "Authenticating with Firebase")
+            
+            val authResult = auth.signInWithCredential(credential).await()
+            val firebaseUser = authResult.user
+            
+            if (firebaseUser == null) {
+                Log.e("GoogleSignInHelper", "Firebase user is null after authentication")
+                return Pair(null, null)
+            }
+
+            Log.d("GoogleSignInHelper", "Firebase auth successful for: ${firebaseUser.email}")
+
+            // IMPORTANT: We MUST fetch the Firebase ID token for the backend.
+            // Our ProGuard rules (-dontoptimize, Signature, etc.) will prevent the ParameterizedType crash here.
+            val firebaseIdTokenTask = firebaseUser.getIdToken(true)
+            val tokenResult = firebaseIdTokenTask.await()
+            val token = tokenResult.token
+            
+            Log.d("GoogleSignInHelper", "Firebase ID token obtained successfully")
+
+            Pair(token, account)
         } catch (e: ApiException) {
-            Log.e("GoogleSignInHelper", "Google sign in failed", e)
+            Log.e("GoogleSignInHelper", "Google sign in failed with ApiException: ${e.statusCode}", e)
             Pair(null, null)
         } catch (e: Exception) {
-            Log.e("GoogleSignInHelper", "Firebase authentication failed", e)
+            Log.e("GoogleSignInHelper", "Sign in failed with exception: ${e.javaClass.simpleName} - ${e.message}", e)
             Pair(null, null)
         }
     }

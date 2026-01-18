@@ -6,17 +6,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.R
 import com.example.myapplication.ui.viewmodel.LoginState
 import com.example.myapplication.ui.viewmodel.LoginViewModel
 import kotlinx.coroutines.delay
-import androidx.compose.runtime.LaunchedEffect
 
 @Composable
 fun LoginScreen(
@@ -27,16 +25,23 @@ fun LoginScreen(
     onMessageShown: () -> Unit = {},
     onGoogleSignInClick: () -> Unit = {}
 ) {
-    var email by remember { mutableStateOf("ananya@gmail.com") }
-    var password by remember { mutableStateOf("123") }
     val loginState by viewModel.loginState.collectAsState()
     val context = LocalContext.current
+    var userInitiatedLogin by remember { mutableStateOf(false) }
 
-    // Auto-hide success message after 2 seconds
+    // Auto-hide success message after a delay
     LaunchedEffect(registrationSuccessMessage) {
         if (registrationSuccessMessage != null) {
             delay(2000)
             onMessageShown()
+        }
+    }
+
+    // Reset the user-initiated flag whenever the login process is not active.
+    // This ensures the "Auto logging in..." message can show up again if needed.
+    LaunchedEffect(loginState) {
+        if (loginState !is LoginState.Loading) {
+            userInitiatedLogin = false
         }
     }
 
@@ -51,11 +56,10 @@ fun LoginScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // App Logo - Now using the app_logo resource
             Image(
                 painter = painterResource(id = R.drawable.app_logo),
                 contentDescription = "App Logo",
-                modifier = Modifier.size(180.dp) // Increased size for better visibility
+                modifier = Modifier.size(180.dp)
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -67,92 +71,66 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Manual login fields - commented out for now
-            /*
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Email") },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Password") },
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
+            // Google Sign-In Button
             Button(
-                onClick = { viewModel.login(context, email, password) },
+                onClick = {
+                    userInitiatedLogin = true
+                    onGoogleSignInClick()
+                },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = loginState !is LoginState.Loading
+                enabled = loginState !is LoginState.Loading, // Disable button when loading
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF4285F4), // Google Blue
+                    contentColor = Color.White
+                )
             ) {
-                if (loginState is LoginState.Loading) {
+                // Show loader inside button if login was started by the user
+                if (loginState is LoginState.Loading && userInitiatedLogin) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = MaterialTheme.colorScheme.onPrimary
+                        modifier = Modifier.size(24.dp),
+                        color = Color.White
                     )
                 } else {
-                    Text("Login")
+                    Text("Sign in with Google")
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            */
 
-            // Google Sign-In Button - Blue background with white text
-            Button(
-                onClick = onGoogleSignInClick,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF4285F4), // Google Blue
-                    contentColor = Color.White  // White text
-                )
-            ) {
-                Text("Sign in with Google")
+            // Show auto-login indicator if the app is trying to log in automatically
+            if (loginState is LoginState.Loading && !userInitiatedLogin) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(
+                        text = "Auto logging in...",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Create account button - commented out for now
-            /*
-            TextButton(onClick = onRegisterClick) {
-                Text("Create a new account")
-            }
-            */
-
-            Spacer(modifier = Modifier.height(16.dp))
 
             // Show registration success message if present
             if (registrationSuccessMessage != null) {
                 Text(
                     text = registrationSuccessMessage,
                     color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyLarge
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(top = 16.dp)
                 )
             }
 
-            when (loginState) {
-                is LoginState.Success -> {
-                    val user = (loginState as LoginState.Success).user
-                    Text(
-                        text = "Welcome, ${user.name}!",
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                is LoginState.Error -> {
-                    Text(
-                        text = (loginState as LoginState.Error).message,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-                else -> {}
+            // Show error message if login fails
+            if (loginState is LoginState.Error) {
+                Text(
+                    text = (loginState as LoginState.Error).message,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
             }
         }
     }

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -6,9 +8,25 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+// Load signing properties
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(keystorePropertiesFile.inputStream())
+}
+
 android {
     namespace = "com.example.myapplication"
     compileSdk = 36
+
+    signingConfigs {
+        create("release") {
+            keyAlias = keystoreProperties["keyAlias"] as String?
+            keyPassword = keystoreProperties["keyPassword"] as String?
+            storeFile = keystoreProperties["storeFile"]?.let { file(it) }
+            storePassword = keystoreProperties["storePassword"] as String?
+        }
+    }
 
     defaultConfig {
         applicationId = "com.example.myapplication"
@@ -22,11 +40,13 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -92,14 +112,16 @@ tasks.register<Copy>("copyDebugApk") {
     dependsOn("packageDebug")
 }
 
-// Task to copy Release APKs
+// Task to copy and rename Release APKs
 tasks.register<Copy>("copyReleaseApk") {
-    description = "Copies generated Release APKs to the root generated-apks/release directory"
+    description = "Copies and renames generated Release APKs to the root generated-apks/release directory"
     from(layout.buildDirectory.dir("outputs/apk/release"))
     into(rootProject.layout.projectDirectory.dir("generated-apks/release"))
     include("*.apk")
+    rename { "HamarJodi.apk" }
     dependsOn("packageRelease")
 }
+
 
 // Automatically run the copy tasks after assemble
 afterEvaluate {
